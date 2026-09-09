@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#00552f">
+<title>Combio Energia — Operação V17</title>
+<style>
+:root{--green:#00552f;--green2:#087a43;--green3:#12a150;--bg:#003d24;--card:#f7faf8;--ink:#101614;--muted:#5d6963;--orange:#f59a23;--blue:#2479dc;--red:#d83d3d}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink)}
+button,input,select{font:inherit}button{border:0;cursor:pointer}
+.app{max-width:650px;margin:auto;min-height:100vh;background:linear-gradient(#004c2c,#006337 48%,#004b2b);padding-bottom:86px}
+.header{padding:17px 14px 13px;color:white;display:flex;gap:9px;align-items:center}
+.brand{display:flex;align-items:center;gap:8px;flex:1}.logo{width:54px;height:54px}.logo svg{width:54px;height:54px}
+.brand b{font-size:23px;line-height:.95}.brand small{display:block;color:#75e64d;font-size:15px;font-weight:700;margin-top:4px}
+.title{font-size:17px;font-weight:900;line-height:1.05;text-align:center}.title span{display:block;color:#72e94b;font-size:12px;margin-top:5px}
+.datebox{background:#126d47;border-radius:15px;padding:8px 9px;text-align:center;color:white;font-size:11px;white-space:nowrap}.datebox strong{display:block;font-size:15px}
+main{padding:0 12px}.selector{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.selector button{background:#176d48;color:#dcebe3;border-radius:15px;padding:12px 5px;font-size:12px;font-weight:900}.selector .active{background:#fff;color:#075b34}
+.panel{display:none}.panel.active{display:block}
+.counter-card{background:#101514;color:#fff;border-radius:30px;padding:14px 14px 10px;box-shadow:0 5px 18px #002b1c55;margin-bottom:12px}
+.counter-area{min-height:235px;display:flex;flex-direction:column;align-items:center;justify-content:center;user-select:none}.count{font-size:clamp(86px,27vw,160px);font-weight:900;line-height:.86;letter-spacing:-6px}.label{font-size:27px;font-weight:900;margin-top:17px}.hint{font-size:12px;color:#b9c7c1;margin-top:8px}
+.mode-row{display:grid;grid-template-columns:1fr 120px;height:62px;align-items:center;border-radius:15px;overflow:hidden;background:#202725}.mode{font-weight:900;font-size:13px;text-align:center}.mode-btn{height:62px;font-size:45px;font-weight:900}.minus{background:#d8f1df;color:#075b34}.plus{background:#079846;color:#fff}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:11px}.info{background:var(--card);border-radius:18px;padding:12px;min-height:70px}.info small{color:#53625b;font-weight:700;display:block;font-size:12px;text-align:center}.info strong{font-size:19px;margin-top:5px;display:block;text-align:center}
+.actions{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:11px}.action{border-radius:18px;color:#fff;min-height:75px;padding:10px;font-weight:900}.mix{background:var(--orange)}.bay{background:var(--blue)}.both{background:var(--red)}.share{background:#12a95a}.chat{background:#237e4c}
+.employee{background:var(--card);border-radius:18px;padding:13px;display:grid;grid-template-columns:1.2fr .8fr .9fr;gap:9px;margin-bottom:11px}.employee div+div{border-left:1px solid #b9c8bf;padding-left:9px}.employee small{color:#5b6962;font-weight:700}.employee strong{display:block;font-size:18px;margin-top:4px}
+.truck-card{background:#f4f6f5;color:#17232d;border:4px solid var(--blue);border-radius:30px;padding:14px;box-shadow:0 5px 18px #002b1c55;margin-bottom:12px;text-align:center}.truck-card .counter-area{min-height:220px}.truck-card .label{color:#17548e}.truck-btn{width:100%;background:var(--blue);color:#fff;border-radius:18px;padding:21px 10px;font-size:22px;font-weight:900}
+.photo-card{background:#17232d;color:#fff;border-radius:20px;padding:15px;margin-bottom:11px}.photo-card h3{margin:0 0 5px;font-size:18px}.photo-card p{margin:0 0 12px;color:#c8d2ce;font-size:13px}.photo-btn{width:100%;background:#fff;color:#17232d;border-radius:15px;padding:16px;font-weight:900}.note-preview{display:none;margin-top:10px;background:#e9f4ff;color:#17548e;border-radius:14px;padding:10px;font-size:13px;font-weight:800}.barcode-card{background:#fff;color:#17232d;border:3px solid var(--blue);border-radius:20px;padding:15px;margin-bottom:11px}.barcode-btn{width:100%;background:var(--blue);color:#fff;border-radius:15px;padding:16px;font-weight:900}.barcode-result{display:none;margin-top:10px;background:#eaf4ff;border-radius:14px;padding:10px}.barcode-result input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #b8c9d8;border-radius:10px;font-weight:800}.copy-btn{width:100%;margin-top:8px;background:#079846;color:#fff;border-radius:12px;padding:13px;font-weight:900}
+.bottom{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(650px,100%);height:78px;background:#003f25;display:grid;grid-template-columns:repeat(3,1fr);z-index:20;border-top:1px solid #16704a}.bottom button{background:transparent;color:#d6e3dc;font-weight:800;font-size:12px}.bottom .bi{font-size:25px;display:block;margin-bottom:3px}.bottom .active{color:#71ed49}
+.overlay{position:fixed;inset:0;background:#001e13aa;display:none;align-items:flex-end;justify-content:center;z-index:50}.modal{width:min(650px,100%);background:#f7faf8;border-radius:25px 25px 0 0;padding:18px;max-height:88vh;overflow:auto}.modal h2{margin:0 0 12px;color:#075b34}.modal label{font-weight:800;font-size:13px;color:#45534c;display:block;margin:10px 0 5px}.modal input,.modal select{width:100%;padding:13px;border:1px solid #c5d2cb;border-radius:12px;background:white}.modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px}.ok{background:#079846;color:white;border-radius:12px;padding:14px;font-weight:900}.cancel{background:#e3eae6;color:#183226;border-radius:12px;padding:14px;font-weight:900}
+.toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:#062c1d;color:#fff;padding:12px 16px;border-radius:14px;z-index:100;display:none;max-width:92%;text-align:center;font-weight:800}
+.history-item{background:#fff;border:1px solid #d7e1db;border-radius:14px;padding:12px;margin:8px 0}.history-item strong{color:#075b34}.history-back{position:sticky;top:-18px;z-index:5;width:100%;box-sizing:border-box;background:#075b34;color:#fff;border:0;border-radius:14px;padding:13px;margin:0 0 10px;font-weight:900;font-size:16px;box-shadow:0 4px 12px #002b1c55}.history-list{padding-bottom:4px}
+.statusbar{display:flex;align-items:center;justify-content:space-between;background:#12a150;color:#fff;border-radius:16px;padding:10px 13px;margin:0 0 10px;font-weight:900}.statusbar small{display:block;font-size:10px;opacity:.9}.chat-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}.chat-top{border-radius:16px;color:#fff;min-height:58px;padding:9px;font-weight:900}.start-chat{background:#237e4c}.end-chat{background:#52645b}.turn-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:11px 0}.turn-btn{border-radius:16px;color:#fff;min-height:58px;padding:9px;font-weight:900}.start-turn{background:#079846}.end-turn{background:#d83d3d}.counter-card{padding-top:8px}.counter-area{min-height:280px}.count{font-size:clamp(96px,30vw,178px)}
+.action.both{background:#7b4bc4;}
+</style>
+</head>
+<body>
+<div id="floatingMini" style="display:none;position:fixed;right:12px;bottom:88px;z-index:40;background:#101514;color:#fff;border:2px solid #12a150;border-radius:18px;padding:10px 14px;box-shadow:0 6px 20px #0008;text-align:center;font-weight:900"><div style="font-size:10px;color:#75e64d">SANSOM • ATIVO</div><div id="miniCount" style="font-size:34px;line-height:1">0</div><div style="font-size:10px">CONCHAS</div></div><div class="app">
+<header class="header">
+<div class="brand"><div class="logo"><svg viewBox="0 0 80 80"><path d="M39 69C18 60 8 40 18 14c18 2 31 13 35 30C55 57 47 66 39 69Z" fill="#6bdc3c"/><path d="M42 69C44 44 57 23 72 12c7 28-4 49-30 57Z" fill="#27b94a"/><path d="M39 69C39 49 45 31 60 18" fill="none" stroke="#087a43" stroke-width="4"/></svg></div><div><b>Combio</b><small>Energia</small></div></div>
+<div class="title" id="pageTitle">CONSUMO DO SANSOM<span>Produção • Turno</span></div>
+<div class="datebox"><strong id="date"></strong><span>Turno: 07:00 - 19:00</span></div>
+</header>
+<main>
+<div class="selector"><button id="consTab" class="active">🟢 CONSUMO DO SANSOM</button><button id="descTab">🔵 DESCARGA DE CAMINHÃO</button></div>
+
+<section id="consPanel" class="panel active">
+ <div class="statusbar"><div><small>STATUS DA OPERAÇÃO</small>● EM OPERAÇÃO</div><strong>SANSOM</strong></div>
+ <div class="chat-row"><button class="chat-top start-chat" id="chatCons">💬 INICIAR CONVERSA</button><button class="chat-top end-chat" id="endChatCons">✖ ENCERRAR CONVERSA</button></div>
+ <div class="counter-card"><div class="counter-area" id="counterArea"><div id="count" class="count">0</div><div class="label">CONCHAS</div><div class="hint">Toque no contador para somar 1</div></div><div class="mode-row"><div class="mode" id="modeText">TOQUE NO CONTADOR PARA SOMAR</div><button class="mode-btn minus" id="minusMode">− 1</button></div></div>
+ <div class="info-grid"><div class="info"><small>MIX EM USO</small><strong id="currentMix">3 CVC x 2 FNS</strong></div><div class="info"><small>BAIA EM USO</small><strong id="currentBays">5 e 6</strong></div></div>
+ <div class="actions"><button class="action mix" id="fimMix">⟳ TROCAR MIX</button><button class="action bay" id="fimBaia">⇄ TROCAR BAIA</button><button class="action both" id="fimMixBaia">⟳⇄ TROCAR MIX + BAIA</button></div>
+ <div class="turn-row"><button class="turn-btn start-turn" id="startTurn">▶ INICIAR TURNO</button><button class="turn-btn end-turn" id="endTurn">■ ENCERRAR TURNO</button></div>
+</section>
+
+<section id="descPanel" class="panel">
+ <div class="statusbar"><div><small>STATUS DA OPERAÇÃO</small>● EM OPERAÇÃO</div><strong>DESCARGA</strong></div>
+ <div class="chat-row"><button class="chat-top start-chat" id="chatDesc">💬 INICIAR CONVERSA</button><button class="chat-top end-chat" id="endChatDesc">✖ ENCERRAR CONVERSA</button></div>
+ <div class="truck-card"><div class="counter-area" id="truckCounterArea"><div id="trucks" class="count">0</div><div class="label">CAMINHÕES DESCARREGADOS</div><div class="hint">Toque no contador para somar 1</div></div><button class="truck-btn" id="addTruck">− 1</button></div>
+ <div class="photo-card"><h3>📷 NOTA + TICKET</h3><p>Fotografe quando necessário.</p><button class="photo-btn" id="photoBtn">📷 FOTOGRAFAR</button><input id="photoInput" type="file" accept="image/*" capture="environment" hidden><div id="notePreview" class="note-preview">✅ Foto selecionada.</div></div>
+ <div class="barcode-card"><h3 style="margin:0 0 5px">🔎 CÓDIGO DE BARRAS</h3><p style="margin:0 0 12px;color:#52636f;font-size:13px">Leia o código quando necessário.</p><button class="barcode-btn" id="barcodeBtn">🔎 LER CÓDIGO</button><div id="barcodeResult" class="barcode-result"><input id="barcodeValue" readonly><button class="copy-btn" id="copyBarcode">📋 COPIAR CÓDIGO</button></div></div>
+ <div class="info-grid"><div class="info"><small>ÚLTIMO CAMINHÃO</small><strong id="lastTruck">—</strong></div><div class="info"><small>NOTAS FOTOGRAFADAS</small><strong id="photoCount">0</strong></div></div>
+ <div class="turn-row"><button class="turn-btn start-turn" id="startTurnDesc">▶ INICIAR TURNO</button><button class="turn-btn end-turn" id="endTurnDesc">■ ENCERRAR TURNO</button></div>
+</section>
+
+
+</main>
+<nav class="bottom"><button class="active" id="homeBtn"><span class="bi">⌂</span>Início</button><button id="historyBtn"><span class="bi">☷</span>Histórico</button><button id="settingsBtn"><span class="bi">⚙</span>Configurações</button></nav>
+</div>
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div><div class="toast" id="toast"></div>
+<script>
+/* COMBIO — V7 | LÓGICA DIVIDIDA EM DOIS BLOCOS INDEPENDENTES
+   BLOCO 1: CONSUMO / SANSOM
+   BLOCO 2: DESCARGA
+*/
+const KEY='combio_operacao_v10';
+const defaultState={
+  operator:'João Silva',team:'A',shifts:{consumo:{open:false,type:null,start:null,segment:null,nightId:null},descarga:{open:false,type:null,start:null,segment:null,nightId:null}},
+  active:'consumo',consumo:{count:0,mix:'3 CVC x 2 FNS',bays:'5 e 6',totalShift:0},
+  descarga:{trucks:0,lastTruck:null,photos:0,barcode:'',currentDraft:null,records:[]},
+  chats:{consumo:{open:false,messages:[]},descarga:{open:false,messages:[]}},
+  events:[],settings:{photoRequired:false,barcodeRequired:false,whatsapp:{consumo:'',descarga:''}},gps:{permission:'pending',last:null,radius:null,center:null,maxDistance:0,outside:false,lastMovement:null,inactivityStarted:null,inactivityOpen:false},
+  pendingSync:[]
+};
+const $=id=>document.getElementById(id);
+function load(){try{return Object.assign(structuredClone(defaultState),JSON.parse(localStorage.getItem(KEY)||'{}'),{consumo:Object.assign(defaultState.consumo,JSON.parse(localStorage.getItem(KEY)||'{}').consumo||{}),descarga:Object.assign(defaultState.descarga,JSON.parse(localStorage.getItem(KEY)||'{}').descarga||{}, {records:(JSON.parse(localStorage.getItem(KEY)||'{}').descarga||{}).records||[]}),chats:Object.assign(defaultState.chats,JSON.parse(localStorage.getItem(KEY)||'{}').chats||{}),settings:Object.assign(defaultState.settings,JSON.parse(localStorage.getItem(KEY)||'{}').settings||{}, {whatsapp:Object.assign(defaultState.settings.whatsapp,(JSON.parse(localStorage.getItem(KEY)||'{}').settings||{}).whatsapp||{})}),shifts:Object.assign(defaultState.shifts,JSON.parse(localStorage.getItem(KEY)||'{}').shifts||{}),gps:Object.assign(defaultState.gps,JSON.parse(localStorage.getItem(KEY)||'{}').gps||{})});}catch(e){return structuredClone(defaultState)}}
+let state=load();
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function nowDate(){return new Date()}
+function time(){return nowDate().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function date(){return nowDate().toLocaleDateString('pt-BR')}
+function iso(){return nowDate().toISOString()}
+$('date').textContent=date();
+function toast(msg){$('toast').textContent=msg;$('toast').style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>$('toast').style.display='none',2600)}
+function log(type,extra={}){const e={id:crypto.randomUUID?.()||String(Date.now()+Math.random()),type,date:date(),time:time(),timestamp:iso(),operator:state.operator,team:state.team,operation:state.active==='consumo'?'SANSOM':'DESCARGA',shift:state.shifts[state.active].type,...extra};state.events.push(e);state.pendingSync.push(e);save()}
+function render(){
+  $('count').textContent=state.consumo.count;$('trucks').textContent=state.descarga.trucks;
+  $('currentMix').textContent=state.consumo.mix;$('currentBays').textContent=state.consumo.bays;
+  $('lastTruck').textContent=state.descarga.lastTruck||'—';$('photoCount').textContent=state.descarga.photos; if($('miniCount')) $('miniCount').textContent=state.consumo.count;
+  const op=state.shifts[state.active].open?'● EM OPERAÇÃO':'● TURNO NÃO INICIADO';
+  document.querySelectorAll('.statusbar').forEach(x=>{x.querySelector('div').innerHTML='<small>STATUS DA OPERAÇÃO</small>'+op;x.style.background=state.shifts[state.active].open?'#12a150':'#52645b'});
+}
+function currentShift(){const h=nowDate().getHours();return h>=7&&h<19?'DIURNO':'NOTURNO'}
+function suggestedTeam(){
+  // Regra-base: sugestão segue a escala 4x4; enquanto a escala completa não foi cadastrada,
+  // mantém a equipe atual como sugestão para não inventar uma escala.
+  return state.team||'A';
+}
+function activeShift(){return state.shifts[state.active]}
+function startShift(){
+  if(activeShift().open){toast('O turno já está iniciado');return}
+  const type=currentShift(), t=time();
+  openModal('INICIAR TURNO',`<p><b>Turno identificado automaticamente:</b> ${type}</p><p>Horário de início: <b>${t}</b></p><label>Equipe</label><select id="shiftTeam"><option>A</option><option>B</option><option>C</option><option>D</option></select><label>Operador</label><input id="shiftOperator" value="${state.operator}"><p style="font-size:12px;color:#5d6963">Confirme para registrar o início do turno.</p>`,'INICIAR',()=>{
+    state.team=$('shiftTeam').value;state.operator=$('shiftOperator').value.trim()||state.operator;
+    state.shifts[state.active]={open:true,type,start:t,segment:type==='DIURNO'?'07:00-19:00':(nowDate().getHours()<7?'00:00-07:00':'19:00-23:59'),nightId:type==='NOTURNO'?(date()+'-'+t):null};
+    log('INÍCIO DE TURNO',{startTime:t});save();render();startGPS();keepAwake();toast('Turno iniciado');
+  });
+  setTimeout(()=>{if($('shiftTeam'))$('shiftTeam').value=suggestedTeam()},30)
+}
+function endShift(){
+  if(!activeShift().open){toast('Não há turno aberto');return}
+  const t=time(), op=state.active==='consumo'?'SANSOM':'DESCARGA';
+  const summary=op==='SANSOM'?`Conchas no segmento: <b>${state.consumo.count}</b><br>Total acumulado do turno: <b>${state.consumo.totalShift+state.consumo.count}</b><br>Mix: <b>${state.consumo.mix}</b><br>Baias: <b>${state.consumo.bays}</b>`:`Caminhões registrados: <b>${state.descarga.trucks}</b>`;
+  openModal('ENCERRAR TURNO',`<p>Horário: <b>${t}</b></p><p>${summary}</p><p>Ao confirmar, todos os registros deste turno ficam preservados no histórico.</p>`,'ENCERRAR',()=>{
+    log('ENCERRAMENTO DE TURNO',{endTime:t,segmentSummary:{count:state.consumo.count,totalShift:state.consumo.totalShift+state.consumo.count,trucks:state.descarga.trucks}});
+    state.shifts[state.active].open=false;state.shifts[state.active].segment=null;stopGPS();if(wakeLock){wakeLock.release().catch(()=>{});wakeLock=null}save();render();toast('Turno encerrado');
+  })
+}
+function requireShift(){if(!activeShift().open){toast('Inicie o turno antes de registrar a operação');return false}return true}
+/* ================= BLOCO 1 — CONSUMO / SANSOM ================= */
+const Consumo={
+ add(){if(!requireShift())return;state.consumo.count++;save();render()},
+ minus(){if(!requireShift())return;if(state.consumo.count>0){state.consumo.count--;log('CORREÇÃO DE CONTAGEM',{alteracao:'-1 concha',valorAnterior:state.consumo.count+1,valorNovo:state.consumo.count});save();render();toast('1 concha retirada')}},
+ changeMix(){if(!requireShift())return;const n=state.consumo.count,t=time(),old=state.consumo.mix;openModal('TROCAR MIX',`<p>Mix atual: <b>${old}</b><br>Baias: <b>${state.consumo.bays}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Novo mix</label><div style="display:flex;gap:8px;align-items:center"><select id="mixN1"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>FNS</b><span>x</span><select id="mixN2"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>CVC</b></div>`,'CONFIRMAR',()=>{const a=Number($('mixN1').value),b=Number($('mixN2').value);if(a===0&&b===0){toast('O mix mínimo é 0 x 1 em qualquer dos lados');return false}const m=`${a} FNS x ${b} CVC`;log('FIM DE MIX',{mixAnterior:old,mixNovo:m,conchas:n,baias:state.consumo.bays,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.mix=m;save();render();savedShare('MIX SALVO',`Fim do mix ${old} das baias ${state.consumo.bays} com ${n} conchas. Novo mix: ${m}. Horário: ${t}.`);return false})},
+ changeBay(){if(!requireShift())return;const n=state.consumo.count,t=time(),old=state.consumo.bays;openModal('TROCAR BAIA',`<p>Mix: <b>${state.consumo.mix}</b><br>Baia atual: <b>${old}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Nova baia 1</label><div style="display:flex;gap:8px;align-items:center"><select id="bayN1"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select><span>e</span><select id="bayN2"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>`,'CONFIRMAR',()=>{const b1=$('bayN1').value,b2=$('bayN2').value;if(b1===b2){toast('Escolha duas baias diferentes');return false}const b=`${b1} e ${b2}`;log('FIM DE BAIA',{baiasAnteriores:old,baiasNovas:b,mix:state.consumo.mix,conchas:n,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.bays=b;save();render();savedShare('BAIA SALVA',`Fim de consumo das baias ${old} com ${n} conchas. Novas baias: ${b}. Horário: ${t}.`);return false})},
+ changeMixBay(){if(!requireShift())return;const n=state.consumo.count,t=time(),oldMix=state.consumo.mix,oldBay=state.consumo.bays;openModal('TROCAR MIX + BAIA',`<p>Mix atual: <b>${oldMix}</b><br>Baias atuais: <b>${oldBay}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Novo mix</label><div style="display:flex;gap:8px;align-items:center"><select id="mixN1"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>FNS</b><span>x</span><select id="mixN2"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>CVC</b></div><label>Nova baia 1</label><div style="display:flex;gap:8px;align-items:center"><select id="bayN1"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select><span>e</span><select id="bayN2"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>`,'CONFIRMAR',()=>{const a=Number($('mixN1').value),bMix=Number($('mixN2').value),b1=$('bayN1').value,b2=$('bayN2').value;if(a===0&&bMix===0){toast('O mix mínimo é 0 x 1 em qualquer dos lados');return false}if(b1===b2){toast('Escolha duas baias diferentes');return false}const m=`${a} FNS x ${bMix} CVC`,b=`${b1} e ${b2}`;log('FIM DE MIX + BAIA',{mixAnterior:oldMix,mixNovo:m,baiasAnteriores:oldBay,baiasNovas:b,conchas:n,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.mix=m;state.consumo.bays=b;save();render();savedShare('MIX + BAIA SALVOS',`Fim do mix ${oldMix} e baias ${oldBay} com ${n} conchas. Novo mix: ${m}. Novas baias: ${b}. Horário: ${t}.`);return false})},
+ chatStart(){Chat.open('consumo')},chatEnd(){Chat.close('consumo')}
+};
+/* ================= BLOCO 2 — DESCARGA ================= */
+const Descarga={
+  newDraft(){
+    if(state.descarga.currentDraft){toast('Finalize o cadastro da descarga atual antes de iniciar outra');return}
+    const numero=state.descarga.trucks+1;
+    state.descarga.currentDraft={
+      id:crypto.randomUUID?.()||('desc-'+Date.now()),numero,numeroCaminhao:'',
+      data:date(),hora:time(),timestamp:iso(),operator:state.operator,team:state.team,
+      photoId:null,photoName:null,photoReady:false,barcode:'',barcodeReady:false
+    };
+    save();
+    openModal('ACRESCENTAR DESCARGA',`<p style="background:#fff4df;padding:10px;border-radius:10px;text-align:center;font-weight:800">DESCARGA — PREENCHA OS DADOS E DOCUMENTOS</p><p><b>Descarga nº ${numero}</b></p><label>Número do caminhão <span style="color:#777">(opcional)</span></label><input id="truckNumber" placeholder="Digite se quiser identificar"><div style="margin-top:14px;padding:12px;background:#eef6f1;border-radius:12px"><b>Dados automáticos</b><br>Data: ${date()}<br>Hora: ${time()}<br>Operador: ${state.operator}<br>Equipe: ${state.team}</div><div style="margin-top:14px"><b>Documentação</b><p style="margin:6px 0">Foto NF + ticket: <strong id="draftPhotoStatus">${state.settings.photoRequired?'OBRIGATÓRIA':'opcional'}</strong></p><button type="button" id="draftPhotoBtn" class="photo-btn" style="width:100%">📷 FOTOGRAFAR NF + TICKET</button><p style="margin:10px 0 6px">Código de barras: <strong id="draftBarcodeStatus">${state.settings.barcodeRequired?'OBRIGATÓRIO':'opcional'}</strong></p><button type="button" id="draftBarcodeBtn" class="barcode-btn" style="width:100%">🔎 LER CÓDIGO</button><div id="draftBarcodeShow" style="display:none;margin-top:8px;font-weight:800"></div></div>`, 'SALVAR DESCARGA', ()=>{
+      const d=state.descarga.currentDraft;if(!d)return false;
+      d.numeroCaminhao=$('truckNumber').value.trim();
+      d.data= date(); d.hora=time(); d.timestamp=iso(); d.operator=state.operator; d.team=state.team;
+      state.descarga.trucks++; state.descarga.lastTruck=d.hora; state.descarga.photos += d.photoReady?1:0; state.descarga.barcode=d.barcode||'';
+      const record={...d,numero:state.descarga.trucks,status:'CONCLUÍDA'};
+      state.descarga.records.push(record);
+      log('DESCARGA REGISTRADA',{numero:record.numero,numeroCaminhao:record.numeroCaminhao||null,horario:record.hora,photoId:record.photoId||null,barcode:record.barcode||null,documentacao:{foto:!!record.photoReady,codigo:!!record.barcodeReady}});
+      state.descarga.currentDraft=null; save(); render(); openModal('DADOS GRAVADOS COM SUCESSO',`<div style="text-align:center;font-size:21px;font-weight:900;color:#075b34;margin:10px 0 16px">✅ DESCARGA GRAVADA COM SUCESSO</div><p style="text-align:center">A descarga nº <b>${record.numero}</b> foi salva no aparelho e registrada no histórico.</p><p style="text-align:center;color:#53625b">Toque em PRÓXIMO CAMINHÃO para abrir o próximo lançamento.</p>`,'PRÓXIMO CAMINHÃO',()=>{setTimeout(()=>Descarga.newDraft(),120);return true});
+      return true;
+    });
+    setTimeout(()=>{
+      const pb=$('draftPhotoBtn'), bb=$('draftBarcodeBtn');
+      if(pb)pb.onclick=()=>{$('photoInput').dataset.targetDraft='1';$('photoInput').click()};
+      if(bb)bb.onclick=()=>readBarcode(true);
+    },30);
+  },
+  minus(){if(!requireShift())return;if(state.descarga.trucks>0){const old=state.descarga.trucks;state.descarga.trucks--;const removed=state.descarga.records.pop();log('CORREÇÃO DE DESCARGA',{valorAnterior:old,valorNovo:state.descarga.trucks,registroRemovido:removed?.id||null});save();render();toast('1 caminhão retirado') }},
+  photo(){if(!requireShift())return;$('photoInput').dataset.targetDraft='1';$('photoInput').click()},
+  barcode(){if(!requireShift())return;return readBarcode(true)},
+  chatStart(){Chat.open('descarga')},chatEnd(){Chat.close('descarga')}
+};
+function normalizeWhatsAppTarget(v){v=(v||'').trim();if(!v)return '';if(/^https?:\/\/(wa\.me|api\.whatsapp\.com)/i.test(v))return v;const digits=v.replace(/\D/g,'');return digits?'https://wa.me/'+digits:''}
+function openWhatsApp(text,op){const target=normalizeWhatsAppTarget(state.settings.whatsapp?.[op]);if(!target){openModal('WHATSAPP PADRÃO',`<p>O registro foi salvo. Defina uma vez o destino padrão do WhatsApp para esta operação.</p><label>Número do WhatsApp</label><input id="waTarget" inputmode="tel" placeholder="Ex.: 5511999999999"><p style="font-size:12px;color:#5d6963">Use o número com DDI e DDD. Ex.: 5511999999999</p>`,'SALVAR E ABRIR',()=>{const v=normalizeWhatsAppTarget($('waTarget').value);if(!v){toast('Informe um número válido');return false}state.settings.whatsapp[op]=v;save();closeModal();setTimeout(()=>openWhatsApp(text,op),120);return false});return}const digits=target.replace(/\D/g,'');const url=target.indexOf('wa.me')>=0?target+(target.includes('?')?'&':'?')+'text='+encodeURIComponent(text):'https://wa.me/'+digits+'?text='+encodeURIComponent(text);window.location.href=url}
+function savedShare(title,text){
+  openModal('AÇÃO SALVA',`<div style="text-align:center;font-size:17px;font-weight:900;color:#075b34;margin-bottom:12px">✅ ${title}</div><p style="background:#e8f5ee;padding:12px;border-radius:12px">${text}</p><p style="text-align:center;color:#53625b">Registro salvo no histórico. Toque em COMPARTILHAR para escolher o WhatsApp.</p>`,'↗ COMPARTILHAR',async()=>{
+    try{
+      if(navigator.share){
+        await navigator.share({title:'Combio Energia',text});
+      }else if(navigator.clipboard&&navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(text);
+        toast('Mensagem copiada. Abra o WhatsApp e cole.');
+      }else{
+        const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+        toast('Mensagem copiada. Abra o WhatsApp e cole.');
+      }
+    }catch(e){ if(e&&e.name!=='AbortError') toast('Não foi possível compartilhar.'); }
+    return false;
+  });
+}
+/* Chat separado por operação, integrado pelo mesmo histórico */
+const Chat={
+ open(op){state.chats[op].open=true;log('INÍCIO DE CONVERSA');save();const label=op==='consumo'?'CONSUMO / SANSOM':'DESCARGA';const msgs=state.chats[op].messages.map(m=>`<div class="history-item"><strong>${m.sender}</strong><br>${m.date} • ${m.time}<br>${m.text}</div>`).join('');openModal('CHAT — '+label,`<div style="max-height:45vh;overflow:auto">${msgs||'<p>Nenhuma mensagem ainda.</p>'}</div><label>Mensagem</label><input id="msg" placeholder="Digite sua mensagem...">`,'ENVIAR',()=>{const m=$('msg').value.trim();if(!m){toast('Digite uma mensagem');return}state.chats[op].messages.push({sender:state.operator,text:m,date:date(),time:time(),timestamp:iso()});log('MENSAGEM ENVIADA',{chat:op,text:m});save();toast('Mensagem enviada')})},
+ close(op){if(!state.chats[op].open){toast('A conversa já está encerrada');return}state.chats[op].open=false;log('FIM DE CONVERSA',{chat:op});save();toast('Conversa encerrada')}
+};
+function openModal(title,body,ok,fn){$('modal').innerHTML=`<h2>${title}</h2>${body}<div class="modal-actions"><button class="cancel" id="cancel">CANCELAR</button><button class="ok" id="ok">${ok}</button></div>`;$('overlay').style.display='flex';$('cancel').onclick=closeModal;$('ok').onclick=()=>{const r=fn?.();if(r!==false)closeModal()}}
+function closeModal(){$('overlay').style.display='none'}
+function showPanel(which){const c=which==='c';state.active=c?'consumo':'descarga';$('consPanel').classList.toggle('active',c);$('descPanel').classList.toggle('active',!c);$('consTab').classList.toggle('active',c);$('descTab').classList.toggle('active',!c);$('pageTitle').innerHTML=c?'CONSUMO DO SANSOM<span>Produção • Turno</span>':'DESCARGA DE CAMINHÃO<span>Recebimento • Turno</span>';save();render()}
+$('consTab').onclick=()=>showPanel('c');$('descTab').onclick=()=>showPanel('d');
+$('counterArea').onclick=()=>Consumo.add();$('minusMode').onclick=()=>Consumo.minus();$('fimMix').onclick=()=>Consumo.changeMix();$('fimBaia').onclick=()=>Consumo.changeBay();$('fimMixBaia').onclick=()=>Consumo.changeMixBay();
+$('truckCounterArea').onclick=()=>Descarga.newDraft();$('addTruck').onclick=()=>Descarga.minus();
+$('chatCons').onclick=()=>Consumo.chatStart();$('endChatCons').onclick=()=>Consumo.chatEnd();$('chatDesc').onclick=()=>Descarga.chatStart();$('endChatDesc').onclick=()=>Descarga.chatEnd();
+$('startTurn').onclick=startShift;$('endTurn').onclick=endShift;$('startTurnDesc').onclick=startShift;$('endTurnDesc').onclick=endShift;
+$('photoBtn').onclick=()=>Descarga.photo();$('photoInput').onchange=async()=>{
+  if(!$('photoInput').files.length)return;
+  const file=$('photoInput').files[0];
+  if(!state.descarga.currentDraft){toast('Abra ACRESCENTAR DESCARGA para vincular a foto ao caminhão');$('photoInput').value='';return}
+  const d=state.descarga.currentDraft;
+  d.photoId=d.id+'-foto'; d.photoName=file.name||'NF-ticket.jpg'; d.photoReady=true;
+  try{await saveMedia(d.photoId,file)}catch(e){toast('Não foi possível guardar a foto offline');return}
+  save();$('notePreview').style.display='block';
+  if($('draftPhotoStatus'))$('draftPhotoStatus').textContent='CAPTURADA ✓';
+  toast('Foto vinculada à descarga nº '+d.numero);
+  $('photoInput').value='';
+};
+$('barcodeBtn').onclick=()=>Descarga.barcode();
+const MEDIA_DB='combio_media_v1';
+function mediaDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(MEDIA_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('photos');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function saveMedia(id,blob){const db=await mediaDB();return new Promise((resolve,reject)=>{const tx=db.transaction('photos','readwrite');tx.objectStore('photos').put(blob,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function getMedia(id){const db=await mediaDB();return new Promise((resolve,reject)=>{const tx=db.transaction('photos','readonly');const r=tx.objectStore('photos').get(id);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)})}
+async function readBarcode(forDraft=false){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    let inp=$('barcodeCameraInput');
+    if(!inp){inp=document.createElement('input');inp.type='file';inp.id='barcodeCameraInput';inp.accept='image/*';inp.setAttribute('capture','environment');inp.hidden=true;document.body.appendChild(inp);
+      inp.onchange=async()=>{if(inp.files&&inp.files[0]){const file=inp.files[0];let decoded=false;
+        if('BarcodeDetector' in window){try{const detector=new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','itf','upc_a','upc_e']});const codes=await detector.detect(await createImageBitmap(file));if(codes.length){const val=codes[0].rawValue;if(forDraft&&state.descarga.currentDraft){state.descarga.currentDraft.barcode=val;state.descarga.currentDraft.barcodeReady=true;if($('draftBarcodeStatus'))$('draftBarcodeStatus').textContent='LIDO ✓';if($('draftBarcodeShow')){ $('draftBarcodeShow').textContent='Código: '+val;$('draftBarcodeShow').style.display='block'; }}else{state.descarga.barcode=val;log('CÓDIGO DE BARRAS',{codigo:val});$('barcodeValue').value=val;$('barcodeResult').style.display='block';}save();render();toast('Código lido');decoded=true}}catch(e){}}
+        if(!decoded)openModal('CÓDIGO DE BARRAS',`<p>Foto capturada. Este aparelho não conseguiu interpretar o código automaticamente.</p><label>Código da NF</label><input id="manualBarcode" inputmode="numeric" placeholder="Digite ou cole o código">`,'SALVAR',()=>{const v=$('manualBarcode').value.trim();if(v){if(forDraft&&state.descarga.currentDraft){state.descarga.currentDraft.barcode=v;state.descarga.currentDraft.barcodeReady=true;if($('draftBarcodeStatus'))$('draftBarcodeStatus').textContent='INFORMADO ✓';if($('draftBarcodeShow')){ $('draftBarcodeShow').textContent='Código: '+v;$('draftBarcodeShow').style.display='block'; }}else{state.descarga.barcode=v;log('CÓDIGO DE BARRAS',{codigo:v});$('barcodeValue').value=v;$('barcodeResult').style.display='block';}save();render();toast('Código salvo')}})}};
+    }
+    inp.value='';inp.click();return;
+  }
+  let stream=null;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+  }catch(e1){
+    try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});}
+    catch(e2){
+      let inp=$('barcodeCameraInput');
+      if(!inp){inp=document.createElement('input');inp.type='file';inp.id='barcodeCameraInput';inp.accept='image/*';inp.setAttribute('capture','environment');inp.hidden=true;document.body.appendChild(inp);}
+      inp.value='';inp.click();toast('Abrindo câmera para fotografar o código');return;
+    }
+  }
+  const hasDetector='BarcodeDetector' in window;
+  openModal('LER CÓDIGO',`<p style="text-align:center">Aponte a câmera para o código de barras.</p><video id="barcodeVideo" style="width:100%;min-height:240px;object-fit:cover;border-radius:15px;background:#000" autoplay playsinline muted></video><p id="barcodeStatus" style="text-align:center;font-weight:800">${hasDetector?'Procurando código...':'Câmera aberta — este aparelho não possui leitor automático.'}</p>${hasDetector?'':'<p style="text-align:center">Se não houver leitura automática, feche e use a opção de digitar o código.</p>'}`,'FECHAR',()=>{if(stream)stream.getTracks().forEach(t=>t.stop());return true});
+  const mv=$('barcodeVideo');
+  if(!mv){stream.getTracks().forEach(t=>t.stop());return}
+  mv.srcObject=stream;mv.muted=true;mv.setAttribute('playsinline','');
+  try{await mv.play()}catch(e){}
+  if(!hasDetector)return;
+  const detector=new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','itf','upc_a','upc_e']});
+  let done=false;
+  const scan=async()=>{if(done||!document.body.contains(mv))return;try{if(mv.readyState>=2){const codes=await detector.detect(mv);if(codes.length){done=true;const val=codes[0].rawValue;if(forDraft&&state.descarga.currentDraft){state.descarga.currentDraft.barcode=val;state.descarga.currentDraft.barcodeReady=true;if($('draftBarcodeStatus'))$('draftBarcodeStatus').textContent='LIDO ✓';if($('draftBarcodeShow')){ $('draftBarcodeShow').textContent='Código: '+val;$('draftBarcodeShow').style.display='block'; }}else{state.descarga.barcode=val;log('CÓDIGO DE BARRAS',{codigo:val});$('barcodeValue').value=val;$('barcodeResult').style.display='block';}stream.getTracks().forEach(t=>t.stop());closeModal();save();render();toast('Código lido');return}}}catch(e){}requestAnimationFrame(scan)};scan();
+}
+$('copyBarcode').onclick=async()=>{const v=$('barcodeValue').value;if(!v)return;try{await navigator.clipboard.writeText(v);toast('Código copiado')}catch(e){toast(v)}};
+$('historyBtn').onclick=()=>{const items=state.events.slice().reverse().map(e=>{let extra='';if(e.type==='DESCARGA REGISTRADA'){extra=`<br>🚛 Caminhão: ${e.numeroCaminhao||'Não informado'}<br>📷 Foto NF + ticket: ${e.documentacao?.foto?'✅ Registrada':'⚪ Não registrada'}<br>🔎 Código de barras: ${e.documentacao?.codigo?'✅ Registrado':'⚪ Não registrado'}${e.barcode?'<br>🔢 Código: '+e.barcode:''}`;}return `<div class="history-item"><strong>${e.type}</strong><br>${e.date} • ${e.time}<br>Operador: ${e.operator} • Equipe: ${e.team}<br>Operação: ${e.operation}${e.conchas!=null?'<br>Conchas: '+e.conchas:''}${e.text?'<br>'+e.text:''}${extra}</div>`}).join('');const body=`<button class="history-back" id="historyBack">↩ VOLTAR</button><div class="history-list">${items||'<p>Nenhum evento registrado.</p>'}</div>`;openModal('HISTÓRICO',body,'FECHAR',closeModal);$('historyBack').onclick=closeModal};
+$('settingsBtn').onclick=()=>{openModal('CONFIGURAÇÕES',`<label>Operador atual</label><input id="newOperator" value="${state.operator}"><label>Equipe</label><select id="newTeam"><option>A</option><option>B</option><option>C</option><option>D</option></select><p style="margin-top:16px"><b>🔄 TROCA DE OPERADOR</b></p><label>Novo operador</label><input id="replacement" placeholder="Nome do substituto"><label>Motivo da troca</label><select id="reason"><option>Substituição</option><option>Almoço</option><option>Problema operacional</option><option>Saída do operador</option><option>Outro</option></select><label><input id="photoReq" type="checkbox" style="width:auto"> Exigir foto NF + ticket na descarga</label><label><input id="barcodeReq" type="checkbox" style="width:auto"> Exigir código de barras na descarga</label><label>WhatsApp padrão — SANSOM</label><input id="waCons" inputmode="tel" placeholder="Número ou link wa.me"><label>WhatsApp padrão — DESCARGA</label><input id="waDesc" inputmode="tel" placeholder="Número ou link wa.me">`,'SALVAR',()=>{const r=$('replacement').value.trim();if(r){const old=state.operator;state.operator=r;log('TROCA DE OPERADOR',{operadorAnterior:old,operadorNovo:r,motivo:$('reason').value})}else{const n=$('newOperator').value.trim();if(n&&n!==state.operator){const old=state.operator;state.operator=n;log('ALTERAÇÃO DE OPERADOR',{operadorAnterior:old,operadorNovo:n})}}state.team=$('newTeam').value;state.settings.photoRequired=$('photoReq').checked;state.settings.barcodeRequired=$('barcodeReq').checked;state.settings.whatsapp={consumo:normalizeWhatsAppTarget($('waCons').value),descarga:normalizeWhatsAppTarget($('waDesc').value)};save();render();toast('Configurações salvas')});setTimeout(()=>{if($('newTeam'))$('newTeam').value=state.team;if($('photoReq'))$('photoReq').checked=state.settings.photoRequired;if($('barcodeReq'))$('barcodeReq').checked=state.settings.barcodeRequired;if($('waCons'))$('waCons').value=state.settings.whatsapp?.consumo||'';if($('waDesc'))$('waDesc').value=state.settings.whatsapp?.descarga||''},30)};
+$('homeBtn').onclick=()=>showPanel(state.active==='consumo'?'c':'d');
+/* LOCALIZAÇÃO / DESLOCAMENTO / RAIO / INATIVIDADE
+   A coleta fica invisível para o operador. Os eventos são preparados para sincronização futura com o painel/Firebase. */
+let gpsWatchId=null, wakeLock=null;
+function haversine(a,b){const R=6371000,rad=Math.PI/180;const dLat=(b.lat-a.lat)*rad,dLon=(b.lon-a.lon)*rad;const x=Math.sin(dLat/2)**2+Math.cos(a.lat*rad)*Math.cos(b.lat*rad)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+function registerMovement(pos){
+  const now=Date.now(), point={lat:pos.coords.latitude,lon:pos.coords.longitude,accuracy:pos.coords.accuracy||0,timestamp:new Date(now).toISOString()};
+  state.gps.permission='granted';
+  if(!state.gps.center){state.gps.center=point;state.gps.maxDistance=0;state.gps.radius=100;}
+  const from=state.gps.last||state.gps.center, distFromCenter=haversine(state.gps.center,point), step=haversine(from,point);
+  if(distFromCenter>state.gps.maxDistance) state.gps.maxDistance=Math.round(distFromCenter);
+  // Aprende um raio conservador a partir do deslocamento normal, com limite inicial de 100 m.
+  state.gps.radius=Math.max(100,Math.min(1000,Math.ceil((state.gps.maxDistance+50)/50)*50));
+  if(step>=8){
+    state.gps.lastMovement=point.timestamp;
+    if(state.gps.inactivityOpen){
+      const started=state.gps.inactivityStarted?new Date(state.gps.inactivityStarted).getTime():now-600000;
+      log('SERVIÇO RETOMADO',{duracaoMinutos:Math.max(10,Math.round((now-started)/60000)),localizacao:point});
+      state.gps.inactivityOpen=false;state.gps.inactivityStarted=null;
+    }
+  }
+  const outside=distFromCenter>state.gps.radius;
+  if(outside&&!state.gps.outside){log('FORA DO RAIO DE ATUAÇÃO',{localizacaoInicial:state.gps.center,localizacaoAtual:point,distanciaMetros:Math.round(distFromCenter),raioMetros:state.gps.radius});}
+  if(!outside&&state.gps.outside){log('RETORNO AO RAIO DE ATUAÇÃO',{localizacaoAtual:point,raioMetros:state.gps.radius});}
+  state.gps.outside=outside;state.gps.last=point;save();render();
+}
+function gpsError(){if(state.gps.permission!=='denied'){state.gps.permission='unavailable';log('SEM DADOS DE LOCALIZAÇÃO');save()}}
+function startGPS(){
+  if(!navigator.geolocation){gpsError();return}
+  if(gpsWatchId!==null) navigator.geolocation.clearWatch(gpsWatchId);
+  gpsWatchId=navigator.geolocation.watchPosition(registerMovement,gpsError,{enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+}
+function stopGPS(){if(gpsWatchId!==null){navigator.geolocation.clearWatch(gpsWatchId);gpsWatchId=null}}
+function checkInactivity(){
+  if(!activeShift().open||state.active!=='consumo'||!state.gps.lastMovement)return;
+  const elapsed=Date.now()-new Date(state.gps.lastMovement).getTime();
+  if(elapsed>=600000&&!state.gps.inactivityOpen){state.gps.inactivityOpen=true;state.gps.inactivityStarted=new Date(Date.now()-elapsed).toISOString();log('SERVIÇO INTERROMPIDO',{motivo:'INATIVIDADE',duracaoMinutos:10,ultimaMovimentacao:state.gps.lastMovement,localizacao:state.gps.last});save();}
+}
+function requestGPS(){startGPS()}
+requestGPS();
+setInterval(checkInactivity,30000);
+
+/* Mantém a aplicação acordada quando o navegador permitir. Em PWA/WebView, o contêiner nativo pode manter a atividade em segundo plano. */
+async function keepAwake(){try{if('wakeLock' in navigator&&activeShift().open&&!wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>wakeLock=null)}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){keepAwake();$('floatingMini').style.display='none'}else if(activeShift().open){$('floatingMini').style.display='block';log('APLICATIVO EM SEGUNDO PLANO');save()}});
+window.addEventListener('beforeunload',()=>{if(activeShift().open)log('APLICATIVO ENCERRADO/SAÍDA DA TELA');stopGPS()});
+/* Avisos de 10 minutos: 06:50, 18:50 e 23:50. O aviso de 23:50 não encerra o turno noturno. */
+let warned='';setInterval(()=>{const d=nowDate(),k=d.toISOString().slice(0,10)+' '+d.getHours()+':'+d.getMinutes();if(d.getMinutes()===50&&(d.getHours()===6||d.getHours()===18||d.getHours()===23)&&warned!==k){warned=k;if(d.getHours()===23)toast('Aviso: fechamento do segmento do dia à meia-noite. O turno noturno continua.');else toast('Aviso: faltam 10 minutos para o encerramento do turno.');log('ALERTA DE FIM DE SEGMENTO',{horarioAviso:time()})}},30000);
+function syncPending(){if(!navigator.onLine)return; if(!state.pendingSync.length)return; save(); toast('Internet recuperada — registros locais prontos para sincronização');}
+window.addEventListener('online',()=>{log('INTERNET RECUPERADA');syncPending()});window.addEventListener('offline',()=>{log('INTERNET PERDIDA');save();toast('Sem internet — trabalhando offline')});
+setTimeout(()=>{if(navigator.onLine)syncPending()},500);
+render();
+</script>
+</body>
+</html>
