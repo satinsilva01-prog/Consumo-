@@ -57,6 +57,7 @@ main{padding:0 12px}.selector{display:grid;grid-template-columns:1fr 1fr;gap:8px
  <div class="statusbar"><div><small>STATUS DA OPERAÇÃO</small>● EM OPERAÇÃO</div><strong>DESCARGA</strong></div>
  <div class="chat-row"><button class="chat-top start-chat" id="chatDesc">💬 INICIAR CONVERSA</button><button class="chat-top end-chat" id="endChatDesc">✖ ENCERRAR CONVERSA</button></div>
  <div class="truck-card"><div class="counter-area" id="truckCounterArea"><div id="trucks" class="count">0</div><div class="label">CAMINHÕES DESCARREGADOS</div><div class="hint">Toque no contador para somar 1</div></div><button class="truck-btn" id="addTruck">− 1</button></div>
+ <div id="openDischargeCard" style="display:none;margin:12px 0;background:#fff4df;border:2px solid #f59a23;border-radius:16px;padding:14px;text-align:center"><div style="font-weight:900;color:#8a4d00">⚠️ DESCARGA EM ABERTO</div><div id="openDischargeText" style="margin:7px 0;font-weight:800"></div><button id="openDischargeBtn" class="action" style="width:100%;background:#f59a23;color:#111">📋 ACESSAR E FINALIZAR DESCARGA</button></div>
  <div class="photo-card"><h3>📷 NOTA + TICKET</h3><p>Fotografe quando necessário.</p><button class="photo-btn" id="photoBtn">📷 FOTOGRAFAR</button><input id="photoInput" type="file" accept="image/*" capture="environment" hidden><div id="notePreview" class="note-preview">✅ Foto selecionada.</div></div>
  <div class="barcode-card"><h3 style="margin:0 0 5px">🔎 CÓDIGO DE BARRAS</h3><p style="margin:0 0 12px;color:#52636f;font-size:13px">Leia o código quando necessário.</p><button class="barcode-btn" id="barcodeBtn">🔎 LER CÓDIGO</button><div id="barcodeResult" class="barcode-result"><input id="barcodeValue" readonly><button class="copy-btn" id="copyBarcode">📋 COPIAR CÓDIGO</button></div></div>
  <div class="info-grid"><div class="info"><small>ÚLTIMO CAMINHÃO</small><strong id="lastTruck">—</strong></div><div class="info"><small>NOTAS FOTOGRAFADAS</small><strong id="photoCount">0</strong></div></div>
@@ -85,6 +86,41 @@ const defaultState={
 const $=id=>document.getElementById(id);
 function load(){try{return Object.assign(structuredClone(defaultState),JSON.parse(localStorage.getItem(KEY)||'{}'),{consumo:Object.assign(defaultState.consumo,JSON.parse(localStorage.getItem(KEY)||'{}').consumo||{}),descarga:Object.assign(defaultState.descarga,JSON.parse(localStorage.getItem(KEY)||'{}').descarga||{}, {records:(JSON.parse(localStorage.getItem(KEY)||'{}').descarga||{}).records||[]}),chats:Object.assign(defaultState.chats,JSON.parse(localStorage.getItem(KEY)||'{}').chats||{}),settings:Object.assign(defaultState.settings,JSON.parse(localStorage.getItem(KEY)||'{}').settings||{}, {whatsapp:Object.assign(defaultState.settings.whatsapp,(JSON.parse(localStorage.getItem(KEY)||'{}').settings||{}).whatsapp||{})}),shifts:Object.assign(defaultState.shifts,JSON.parse(localStorage.getItem(KEY)||'{}').shifts||{}),gps:Object.assign(defaultState.gps,JSON.parse(localStorage.getItem(KEY)||'{}').gps||{})});}catch(e){return structuredClone(defaultState)}}
 let state=load();
+/* V30 — BASE DE TESTE LIMPA: zera somente os registros/histórico do teste atual. */
+if(localStorage.getItem('combio_v31_history_reset')!=='1'){
+  state.events=[];
+  state.pendingSync=[];
+  state.descarga.records=[];
+  state.descarga.currentDraft=null;
+  state.descarga.trucks=0;
+  state.descarga.lastTruck=null;
+  state.descarga.photos=0;
+  state.descarga.barcode='';
+  state.consumo.count=0;
+  state.consumo.totalShift=0;
+  localStorage.setItem('combio_v31_history_reset','1');
+  save();
+}
+/* MIGRAÇÃO/INTEGRIDADE: registros de descarga antigos pertencem sempre ao histórico de DESCARGA. */
+(function migrateDischargeHistory(){
+  let changed=false;
+  const dischargeTypes=['DESCARGA REGISTRADA','CORREÇÃO DE DESCARGA','CÓDIGO DE BARRAS','DESCARGA INICIADA','DESCARGA CANCELADA','DESCARGA EM ABERTO'];
+  state.events.forEach(e=>{
+    if(dischargeTypes.includes(e.type) && e.operation!=='DESCARGA'){ e.operation='DESCARGA'; changed=true; }
+  });
+  const d=state.descarga.currentDraft;
+  if(d){
+    if(!d.id)d.id=crypto.randomUUID?.()||("desc-"+Date.now());
+    if(!d.data)d.data=date();
+    if(!d.hora)d.hora=time();
+    if(!d.timestamp)d.timestamp=iso();
+    if(!d.operator)d.operator=state.operator;
+    if(!d.team)d.team=state.team;
+    if(d.photoReady==null)d.photoReady=!!d.photoId;
+    if(d.barcodeReady==null)d.barcodeReady=!!d.barcode;
+  }
+  if(changed) save();
+})();
 function save(){localStorage.setItem(KEY,JSON.stringify(state))}
 function nowDate(){return new Date()}
 function time(){return nowDate().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
@@ -99,7 +135,14 @@ function render(){
   $('lastTruck').textContent=state.descarga.lastTruck||'—';$('photoCount').textContent=state.descarga.photos; if($('miniCount')) $('miniCount').textContent=state.consumo.count;
   const op=state.shifts[state.active].open?'● EM OPERAÇÃO':'● TURNO NÃO INICIADO';
   document.querySelectorAll('.statusbar').forEach(x=>{x.querySelector('div').innerHTML='<small>STATUS DA OPERAÇÃO</small>'+op;x.style.background=state.shifts[state.active].open?'#12a150':'#52645b'});
+  const od=$('openDischargeCard'),ot=$('openDischargeText');
+  if(od&&ot){
+    const d=state.descarga.currentDraft;
+    od.style.display=d?'block':'none';
+    if(d) ot.innerHTML='Descarga nº <b>'+d.numero+'</b> • '+(d.data||'')+' • '+(d.hora||'')+'<br>Cadastro ainda não finalizado. Toque no botão abaixo para continuar.';
+  }
 }
+
 function currentShift(){const h=nowDate().getHours();return h>=7&&h<19?'DIURNO':'NOTURNO'}
 function suggestedTeam(){
   // Escala informada para o teste atual: C está no 2º dia do ciclo em 09/09/2026.
@@ -137,41 +180,71 @@ function requireShift(){if(!activeShift().open){toast('Inicie o turno antes de r
 const Consumo={
  add(){if(!requireShift())return;state.consumo.count++;save();render()},
  minus(){if(!requireShift())return;if(state.consumo.count>0){state.consumo.count--;log('CORREÇÃO DE CONTAGEM',{alteracao:'-1 concha',valorAnterior:state.consumo.count+1,valorNovo:state.consumo.count});save();render();toast('1 concha retirada')}},
- changeMix(){if(!requireShift())return;const n=state.consumo.count,t=time(),old=state.consumo.mix;openModal('TROCAR MIX',`<p>Mix atual: <b>${old}</b><br>Baias: <b>${state.consumo.bays}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Novo mix</label><div style="display:flex;gap:8px;align-items:center"><select id="mixN1"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>FNS</b><span>x</span><select id="mixN2"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>CVC</b></div>`,'CONFIRMAR',()=>{const a=Number($('mixN1').value),b=Number($('mixN2').value);if(a===0&&b===0){toast('O mix mínimo é 0 x 1 em qualquer dos lados');return false}const m=`${a} FNS x ${b} CVC`;log('FIM DE MIX',{mixAnterior:old,mixNovo:m,conchas:n,baias:state.consumo.bays,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.mix=m;save();render();savedShare('MIX SALVO',`Fim do mix ${old} das baias ${state.consumo.bays} com ${n} conchas.\n\nNovo mix: ${m}.\nHorário: ${t}.`);return false})},
+ changeMix(){if(!requireShift())return;const n=state.consumo.count,t=time(),old=state.consumo.mix;openModal('TROCAR MIX',`<p>Mix atual: <b>${old}</b><br>Baias: <b>${state.consumo.bays}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Novo mix</label><div style="display:flex;gap:8px;align-items:center"><select id="mixN1"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>FNS</b><span>x</span><select id="mixN2"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>CVC</b></div>`,'CONFIRMAR',()=>{const a=Number($('mixN1').value),b=Number($('mixN2').value);if(a===0&&b===0){toast('O mix mínimo é 0 x 1 em qualquer dos lados');return false}const m=`${a} FNS x ${b} CVC`;log('FIM DE MIX',{mixAnterior:old,mixNovo:m,conchas:n,baias:state.consumo.bays,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.mix=m;save();render();savedShare('MIX SALVO',`Fim do mix ${old} das baias ${state.consumo.bays} com ${n} conchas.\n\n\nNOVO MIX\n${m}.\nHorário: ${t}.`);return false})},
  changeBay(){if(!requireShift())return;const n=state.consumo.count,t=time(),old=state.consumo.bays;openModal('TROCAR BAIA',`<p>Mix: <b>${state.consumo.mix}</b><br>Baia atual: <b>${old}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Nova baia 1</label><div style="display:flex;gap:8px;align-items:center"><select id="bayN1"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select><span>e</span><select id="bayN2"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>`,'CONFIRMAR',()=>{const b1=$('bayN1').value,b2=$('bayN2').value;if(b1===b2){toast('Escolha duas baias diferentes');return false}const b=`${b1} e ${b2}`;log('FIM DE BAIA',{baiasAnteriores:old,baiasNovas:b,mix:state.consumo.mix,conchas:n,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.bays=b;save();render();savedShare('BAIA SALVA',`Fim de consumo das baias ${old} com ${n} conchas.\n\nNovas baias: ${b}.\nHorário: ${t}.`);return false})},
- changeMixBay(){if(!requireShift())return;const n=state.consumo.count,t=time(),oldMix=state.consumo.mix,oldBay=state.consumo.bays;openModal('TROCAR MIX + BAIA',`<p>Mix atual: <b>${oldMix}</b><br>Baias atuais: <b>${oldBay}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Novo mix</label><div style="display:flex;gap:8px;align-items:center"><select id="mixN1"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>FNS</b><span>x</span><select id="mixN2"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>CVC</b></div><label>Nova baia 1</label><div style="display:flex;gap:8px;align-items:center"><select id="bayN1"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select><span>e</span><select id="bayN2"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>`,'CONFIRMAR',()=>{const a=Number($('mixN1').value),bMix=Number($('mixN2').value),b1=$('bayN1').value,b2=$('bayN2').value;if(a===0&&bMix===0){toast('O mix mínimo é 0 x 1 em qualquer dos lados');return false}if(b1===b2){toast('Escolha duas baias diferentes');return false}const m=`${a} FNS x ${bMix} CVC`,b=`${b1} e ${b2}`;log('FIM DE MIX + BAIA',{mixAnterior:oldMix,mixNovo:m,baiasAnteriores:oldBay,baiasNovas:b,conchas:n,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.mix=m;state.consumo.bays=b;save();render();savedShare('MIX + BAIA SALVOS',`Fim do mix ${oldMix} e baias ${oldBay} com ${n} conchas.\n\nNovo mix: ${m}.\nNovas baias: ${b}.\nHorário: ${t}.`);return false})},
+ changeMixBay(){if(!requireShift())return;const n=state.consumo.count,t=time(),oldMix=state.consumo.mix,oldBay=state.consumo.bays;openModal('TROCAR MIX + BAIA',`<p>Mix atual: <b>${oldMix}</b><br>Baias atuais: <b>${oldBay}</b><br>Conchas do segmento: <b>${n}</b><br>Horário: <b>${t}</b></p><label>Novo mix</label><div style="display:flex;gap:8px;align-items:center"><select id="mixN1"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>FNS</b><span>x</span><select id="mixN2"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select><b>CVC</b></div><label>Nova baia 1</label><div style="display:flex;gap:8px;align-items:center"><select id="bayN1"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select><span>e</span><select id="bayN2"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></div>`,'CONFIRMAR',()=>{const a=Number($('mixN1').value),bMix=Number($('mixN2').value),b1=$('bayN1').value,b2=$('bayN2').value;if(a===0&&bMix===0){toast('O mix mínimo é 0 x 1 em qualquer dos lados');return false}if(b1===b2){toast('Escolha duas baias diferentes');return false}const m=`${a} FNS x ${bMix} CVC`,b=`${b1} e ${b2}`;log('FIM DE MIX + BAIA',{mixAnterior:oldMix,mixNovo:m,baiasAnteriores:oldBay,baiasNovas:b,conchas:n,horario:t});state.consumo.totalShift+=n;state.consumo.count=0;state.consumo.mix=m;state.consumo.bays=b;save();render();savedShare('MIX + BAIA SALVOS',`Fim do mix ${oldMix} e baias ${oldBay} com ${n} conchas.\n\n\nNOVO MIX E NOVAS BAIAS\nMix: ${m}.\nBaias: ${b}.\nHorário: ${t}.`);return false})},
  chatStart(){Chat.open('consumo')},chatEnd(){Chat.close('consumo')}
 };
 /* ================= BLOCO 2 — DESCARGA ================= */
+function openDischargeDraft(){
+  const d=state.descarga.currentDraft;
+  if(!d)return false;
+  if(!d.id)d.id=crypto.randomUUID?.()||('desc-'+Date.now());
+  if(!d.data)d.data=date();
+  if(!d.hora)d.hora=time();
+  if(!d.timestamp)d.timestamp=iso();
+  if(!d.operator)d.operator=state.operator;
+  if(!d.team)d.team=state.team;
+  save();
+  openModal('FINALIZAR DESCARGA',`<p style="background:#fff4df;padding:10px;border-radius:10px;text-align:center;font-weight:800">🚛 DESCARGA EM ANDAMENTO</p><p style="text-align:center">Iniciada em <b>${d.data} • ${d.hora}</b></p><p>Esta descarga <b>não pode ficar parada</b>. Preencha os dados e finalize, ou use CANCELAR para registrar o cancelamento da descarga.</p><label>Número da Nota Fiscal <b style="color:#d83d3d">*</b></label><input id="nfNumber" value="${d.numero||''}" inputmode="numeric" placeholder="Digite o número da NF" required><div style="margin-top:14px;padding:12px;background:#eef6f1;border-radius:12px"><b>Dados automáticos</b><br>Data: ${d.data}<br>Hora: ${d.hora}<br>Operador: ${d.operator}<br>Equipe: ${d.team}</div><div style="margin-top:14px"><b>Documentação</b><p style="margin:6px 0">Foto NF + ticket: <strong id="draftPhotoStatus">${d.photoReady?'CAPTURADA ✓':'disponível'}</strong></p><button type="button" id="draftPhotoBtn" class="photo-btn" style="width:100%">📷 FOTOGRAFAR NF + TICKET</button><p style="margin:10px 0 6px">Código de barras: <strong id="draftBarcodeStatus">${d.barcodeReady?'LIDO ✓':'disponível'}</strong></p><button type="button" id="draftBarcodeBtn" class="barcode-btn" style="width:100%">🔎 LER CÓDIGO</button><div id="draftBarcodeShow" style="${d.barcode?'':'display:none;'}margin-top:8px;font-weight:800">${d.barcode?'Código: '+d.barcode:''}</div></div>`,'FINALIZAR DESCARGA',()=>{
+    const cur=state.descarga.currentDraft;if(!cur)return false;
+    const nf=$('nfNumber').value.trim();
+    if(!nf){toast('Informe o número da Nota Fiscal para finalizar');return false;}
+    cur.numero=nf;
+    delete cur.numeroCaminhao;
+    const record={...cur,status:'CONCLUÍDA',finalizadoEm:iso(),finalizadoHora:time()};
+    state.descarga.trucks+=1;
+    state.descarga.lastTruck=record.finalizadoHora;
+    state.descarga.photos=state.descarga.records.filter(x=>x.photoReady).length+(record.photoReady?1:0);
+    state.descarga.barcode=record.barcode||'';
+    const existingIndex=state.descarga.records.findIndex(x=>x.id===record.id);
+    if(existingIndex>=0) state.descarga.records[existingIndex]=record; else state.descarga.records.push(record);
+    log('DESCARGA REGISTRADA',{numero:record.numero,notaFiscal:record.numero,horario:record.hora,photoId:record.photoId||null,barcode:record.barcode||null,documentacao:{foto:!!record.photoReady,codigo:!!record.barcodeReady}});
+    state.descarga.currentDraft=null; save(); render();
+    openModal('DADOS GRAVADOS COM SUCESSO',`<div style="text-align:center;font-size:21px;font-weight:900;color:#075b34;margin:10px 0 16px">✅ DESCARGA GRAVADA COM SUCESSO</div><p style="text-align:center">NF nº <b>${record.numero}</b> foi salva e registrada no histórico de <b>DESCARGA</b>.</p>`,'PRÓXIMO CAMINHÃO',()=>{setTimeout(()=>Descarga.newDraft(),120);return true});
+    return true;
+  });
+  setTimeout(()=>{
+    const pb=$('draftPhotoBtn'),bb=$('draftBarcodeBtn');
+    if(pb)pb.onclick=()=>{$('photoInput').dataset.targetDraft='1';$('photoInput').click()};
+    if(bb)bb.onclick=()=>readBarcode(true);
+    const cb=$('cancel');
+    if(cb)cb.onclick=()=>{
+      const cur=state.descarga.currentDraft;
+      if(!cur)return closeModal();
+      log('DESCARGA CANCELADA',{numero:cur.numero||null,numeroCaminhao:cur.numeroCaminhao||null,horario:cur.hora,motivo:'Cancelamento pelo operador'});
+      state.descarga.currentDraft=null; save(); render(); closeModal(); toast('Cancelamento da descarga registrado');
+    };
+  },30);
+  return true;
+}
+
 const Descarga={
   newDraft(){
     if(!requireShift())return;
-    if(state.descarga.currentDraft){toast('Finalize o cadastro da descarga atual antes de iniciar outra');return}
-    const numero=state.descarga.trucks+1;
+    if(state.descarga.currentDraft){
+      openDischargeDraft();
+      return;
+    }
     state.descarga.currentDraft={
-      id:crypto.randomUUID?.()||('desc-'+Date.now()),numero,numeroCaminhao:'',
+      id:crypto.randomUUID?.()||('desc-'+Date.now()),numero:'',numeroCaminhao:'',
       data:date(),hora:time(),timestamp:iso(),operator:state.operator,team:state.team,
       photoId:null,photoName:null,photoReady:false,barcode:'',barcodeReady:false
     };
     save();
-    openModal('ACRESCENTAR DESCARGA',`<p style="background:#fff4df;padding:10px;border-radius:10px;text-align:center;font-weight:800">DESCARGA — PREENCHA OS DADOS E DOCUMENTOS</p><p><b>Descarga nº ${numero}</b></p><label>Número do caminhão <span style="color:#777">(opcional)</span></label><input id="truckNumber" placeholder="Digite se quiser identificar"><div style="margin-top:14px;padding:12px;background:#eef6f1;border-radius:12px"><b>Dados automáticos</b><br>Data: ${date()}<br>Hora: ${time()}<br>Operador: ${state.operator}<br>Equipe: ${state.team}</div><div style="margin-top:14px"><b>Documentação</b><p style="margin:6px 0">Foto NF + ticket: <strong id="draftPhotoStatus">disponível</strong></p><button type="button" id="draftPhotoBtn" class="photo-btn" style="width:100%">📷 FOTOGRAFAR NF + TICKET</button><p style="margin:10px 0 6px">Código de barras: <strong id="draftBarcodeStatus">disponível</strong></p><button type="button" id="draftBarcodeBtn" class="barcode-btn" style="width:100%">🔎 LER CÓDIGO</button><div id="draftBarcodeShow" style="display:none;margin-top:8px;font-weight:800"></div></div>`, 'SALVAR DESCARGA', ()=>{
-      const d=state.descarga.currentDraft;if(!d)return false;
-      d.numeroCaminhao=$('truckNumber').value.trim();
-      d.data= date(); d.hora=time(); d.timestamp=iso(); d.operator=state.operator; d.team=state.team;
-      state.descarga.trucks++; state.descarga.lastTruck=d.hora; state.descarga.photos += d.photoReady?1:0; state.descarga.barcode=d.barcode||'';
-      const record={...d,numero:state.descarga.trucks,status:'CONCLUÍDA'};
-      state.descarga.records.push(record);
-      log('DESCARGA REGISTRADA',{numero:record.numero,numeroCaminhao:record.numeroCaminhao||null,horario:record.hora,photoId:record.photoId||null,barcode:record.barcode||null,documentacao:{foto:!!record.photoReady,codigo:!!record.barcodeReady}});
-      state.descarga.currentDraft=null; save(); render(); openModal('DADOS GRAVADOS COM SUCESSO',`<div style="text-align:center;font-size:21px;font-weight:900;color:#075b34;margin:10px 0 16px">✅ DESCARGA GRAVADA COM SUCESSO</div><p style="text-align:center">A descarga nº <b>${record.numero}</b> foi salva no aparelho e registrada no histórico.</p><p style="text-align:center;color:#53625b">Toque em PRÓXIMO CAMINHÃO para abrir o próximo lançamento.</p>`,'PRÓXIMO CAMINHÃO',()=>{setTimeout(()=>Descarga.newDraft(),120);return true});
-      return true;
-    });
-    setTimeout(()=>{
-      const pb=$('draftPhotoBtn'), bb=$('draftBarcodeBtn');
-      if(pb)pb.onclick=()=>{$('photoInput').dataset.targetDraft='1';$('photoInput').click()};
-      if(bb)bb.onclick=()=>readBarcode(true);
-    },30);
+    openDischargeDraft();
   },
-  minus(){if(!requireShift())return;if(state.descarga.trucks>0){const old=state.descarga.trucks;state.descarga.trucks--;const removed=state.descarga.records.pop();log('CORREÇÃO DE DESCARGA',{valorAnterior:old,valorNovo:state.descarga.trucks,registroRemovido:removed?.id||null});save();render();toast('1 caminhão retirado') }},
+  minus(){if(!requireShift())return;if(state.descarga.trucks>0){const old=state.descarga.trucks--;const removed=state.descarga.records.pop();log('CORREÇÃO DE DESCARGA',{valorAnterior:old,valorNovo:state.descarga.trucks,registroRemovido:removed?.id||null});save();render();toast('1 caminhão retirado') }},
   photo(){if(!requireShift())return;$('photoInput').dataset.targetDraft='1';$('photoInput').click()},
   barcode(){if(!requireShift())return;return readBarcode(true)},
   chatStart(){Chat.open('descarga')},chatEnd(){Chat.close('descarga')}
@@ -179,7 +252,7 @@ const Descarga={
 function normalizeWhatsAppTarget(v){v=(v||'').trim();if(!v)return '';if(/^https?:\/\/(wa\.me|api\.whatsapp\.com)/i.test(v))return v;const digits=v.replace(/\D/g,'');return digits?'https://wa.me/'+digits:''}
 function openWhatsApp(text,op){const target=normalizeWhatsAppTarget(state.settings.whatsapp?.[op]);if(!target){openModal('WHATSAPP PADRÃO',`<p>O registro foi salvo. Defina uma vez o destino padrão do WhatsApp para esta operação.</p><label>Número do WhatsApp</label><input id="waTarget" inputmode="tel" placeholder="Ex.: 5511999999999"><p style="font-size:12px;color:#5d6963">Use o número com DDI e DDD. Ex.: 5511999999999</p>`,'SALVAR E ABRIR',()=>{const v=normalizeWhatsAppTarget($('waTarget').value);if(!v){toast('Informe um número válido');return false}state.settings.whatsapp[op]=v;save();closeModal();setTimeout(()=>openWhatsApp(text,op),120);return false});return}const digits=target.replace(/\D/g,'');const url=target.indexOf('wa.me')>=0?target+(target.includes('?')?'&':'?')+'text='+encodeURIComponent(text):'https://wa.me/'+digits+'?text='+encodeURIComponent(text);window.location.href=url}
 function savedShare(title,text){
-  openModal('AÇÃO SALVA',`<div style="text-align:center;font-size:17px;font-weight:900;color:#075b34;margin-bottom:12px">✅ ${title}</div><p style="background:#e8f5ee;padding:12px;border-radius:12px;white-space:pre-line">${text}</p><p style="text-align:center;color:#53625b">Registro salvo no histórico. Toque em COMPARTILHAR para escolher o WhatsApp.</p>`,'↗ COMPARTILHAR',async()=>{
+  openModal('AÇÃO SALVA',`<div style="text-align:center;font-size:17px;font-weight:900;color:#075b34;margin-bottom:12px">✅ ${title}</div><p style="background:#e8f5ee;padding:12px;border-radius:12px;white-space:pre-line;line-height:1.55">${text}</p><p style="text-align:center;color:#53625b">Registro salvo no histórico. Toque em COMPARTILHAR para escolher o WhatsApp.</p>`,'↗ COMPARTILHAR',async()=>{
     try{
       if(navigator.share){
         await navigator.share({title:'Combio Energia',text});
@@ -204,7 +277,7 @@ function closeModal(){$('overlay').style.display='none'}
 function showPanel(which){const c=which==='c';state.active=c?'consumo':'descarga';$('consPanel').classList.toggle('active',c);$('descPanel').classList.toggle('active',!c);$('consTab').classList.toggle('active',c);$('descTab').classList.toggle('active',!c);$('pageTitle').innerHTML=c?'CONSUMO DO SANSOM<span>Produção • Turno</span>':'DESCARGA DE CAMINHÃO<span>Recebimento • Turno</span>';save();render()}
 $('consTab').onclick=()=>showPanel('c');$('descTab').onclick=()=>showPanel('d');
 $('counterArea').onclick=()=>Consumo.add();$('minusMode').onclick=()=>Consumo.minus();$('fimMix').onclick=()=>Consumo.changeMix();$('fimBaia').onclick=()=>Consumo.changeBay();$('fimMixBaia').onclick=()=>Consumo.changeMixBay();
-$('truckCounterArea').onclick=()=>Descarga.newDraft();$('addTruck').onclick=()=>Descarga.minus();
+$('truckCounterArea').onclick=()=>Descarga.newDraft();$('addTruck').onclick=()=>Descarga.minus();$('openDischargeBtn').onclick=()=>openDischargeDraft();
 $('chatCons').onclick=()=>Consumo.chatStart();$('endChatCons').onclick=()=>Consumo.chatEnd();$('chatDesc').onclick=()=>Descarga.chatStart();$('endChatDesc').onclick=()=>Descarga.chatEnd();
 $('startTurn').onclick=startShift;$('endTurn').onclick=endShift;$('startTurnDesc').onclick=startShift;$('endTurnDesc').onclick=endShift;
 $('photoBtn').onclick=()=>Descarga.photo();$('photoInput').onchange=async()=>{
@@ -258,16 +331,19 @@ async function readBarcode(forDraft=false){
 }
 $('copyBarcode').onclick=async()=>{const v=$('barcodeValue').value;if(!v)return;try{await navigator.clipboard.writeText(v);toast('Código copiado')}catch(e){toast(v)}};
 $('historyBtn').onclick=()=>{
+  const dischargeEventTypes=['DESCARGA REGISTRADA','CORREÇÃO DE DESCARGA','CÓDIGO DE BARRAS','DESCARGA INICIADA','DESCARGA CANCELADA','DESCARGA EM ABERTO'];
   const renderHistory=(op)=>{
-    const items=state.events.slice().reverse().filter(e=>e.operation===op).map(e=>{
+    const isDischarge=e=>e.operation==='DESCARGA'||dischargeEventTypes.includes(e.type);
+    const items=state.events.slice().reverse().filter(e=>op==='DESCARGA'?isDischarge(e):!isDischarge(e)).map(e=>{
       let extra='';
-      if(e.type==='DESCARGA REGISTRADA') extra=`<br>🚛 Caminhão: ${e.numeroCaminhao||'Não informado'}<br>📷 Foto NF + ticket: ${e.documentacao?.foto?'✅ Registrada':'⚪ Não registrada'}<br>🔎 Código de barras: ${e.documentacao?.codigo?'✅ Registrado':'⚪ Não registrado'}${e.barcode?'<br>🔢 Código: '+e.barcode:''}`;
+      if(e.type==='DESCARGA REGISTRADA') extra=`<br>🧾 NF: ${e.numero||e.notaFiscal||'Não informada'}<br>📷 Foto NF + ticket: ${e.documentacao?.foto?'✅ Registrada':'⚪ Não registrada'}<br>🔎 Código de barras: ${e.documentacao?.codigo?'✅ Registrado':'⚪ Não registrado'}${e.barcode?'<br>🔢 Código: '+e.barcode:''}`;
       return `<div class="history-item"><strong>${e.type}</strong><br>${e.date} • ${e.time}<br>Operador: ${e.operator} • Equipe: ${e.team}<br>Operação: ${e.operation}${e.conchas!=null?'<br>Conchas: '+e.conchas:''}${e.text?'<br>'+e.text:''}${extra}</div>`
     }).join('');
     return items||'<p>Nenhum evento registrado nesta operação.</p>';
   };
   const body=`<button class="history-back" id="historyBack">↩ VOLTAR</button><div style="display:flex;gap:8px;margin-bottom:10px"><button class="ok" id="histCons" style="flex:1">📊 CONSUMO</button><button class="ok" id="histDesc" style="flex:1">🚛 DESCARGA</button></div><div id="historyContent" class="history-list"></div>`;
   openModal('HISTÓRICO',body,'FECHAR',closeModal);
+  const histCancel=$('cancel'); if(histCancel) histCancel.style.display='none';
   $('historyContent').innerHTML=renderHistory(state.active==='consumo'?'SANSOM':'DESCARGA');
   $('historyBack').onclick=closeModal;
   $('histCons').onclick=()=>{$('historyContent').innerHTML=renderHistory('SANSOM')};
