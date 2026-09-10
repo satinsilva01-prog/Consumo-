@@ -1,0 +1,40 @@
+name: Gerar APK Combio V32
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Extrair projeto V32
+        run: unzip -o Combio_V32_APK_Projeto.zip -d apk-project
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Criar Gradle Wrapper
+        working-directory: apk-project/combio_apk_v32
+        run: gradle wrapper --gradle-version 8.9
+
+      - name: Gerar APK
+        working-directory: apk-project/combio_apk_v32
+        run: ./gradlew assembleDebug
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Combio-V32-APK
+          path: apk-project/combio_apk_v32/app/build/outputs/apk/debug/*.apk
