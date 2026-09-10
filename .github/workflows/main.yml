@@ -1,4 +1,4 @@
-name: Gerar APK Combio V33
+name: Gerar APK Combio V34
 
 on:
   workflow_dispatch:
@@ -11,8 +11,8 @@ jobs:
       - name: Baixar projeto
         uses: actions/checkout@v4
 
-      - name: Extrair projeto V33
-        run: unzip -o Combio_V33_APK_Projeto_CORRIGIDO_COM_ICONES.zip -d apk-project
+      - name: Extrair projeto V34
+        run: unzip -o Combio_V34_APK_Projeto_CORRECAO_CODIGO_BARRAS.zip -d apk-project
 
       - name: Configurar Java
         uses: actions/setup-java@v4
@@ -36,5 +36,5 @@ jobs:
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: Combio-V33-APK
+          name: Combio-V34-APK
           path: apk-project/combio_apk_v32/app/build/outputs/apk/debug/*.apk
