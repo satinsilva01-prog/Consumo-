@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Extrair projeto V32
-        run: unzip -o Combio_V32_APK_Projeto.zip -d apk-project
+        run: unzip -o Combio_V32_APK_Projeto_COM_ICONES.zip -d
 
       - name: Configurar Java
         uses: actions/setup-java@v4
