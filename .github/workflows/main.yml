@@ -15,6 +15,8 @@ jobs:
         run: |
           mkdir -p apk-project/app/src/main/java/com/combio/energia
           mkdir -p apk-project/app/src/main/assets
+          mkdir -p apk-project/app/src/main/res/values
+          mkdir -p apk-project/app/src/main/res/drawable
 
           unzip -o ComBio_App_GitHub_APK.zip -d apk-project/temp
 
@@ -59,7 +61,7 @@ jobs:
           android.useAndroidX=true
           EOF
 
-      - name: Criar módulo Android
+      - name: Criar módulo Android e ícone
         run: |
           cat > apk-project/app/build.gradle <<'EOF'
           plugins {
@@ -80,8 +82,43 @@ jobs:
           }
           EOF
 
+          cat > apk-project/app/src/main/res/values/styles.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:colorAccent">#2E7D32</item>
+                  <item name="android:navigationBarColor">#000000</item>
+                  <item name="android:statusBarColor">#000000</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > apk-project/app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="80"
+              android:viewportHeight="80">
+
+              <path
+                  android:fillColor="#087A43"
+                  android:pathData="M39,69C18,60 8,40 18,14C36,16 49,27 53,44C55,57 47,66 39,69Z"/>
+
+              <path
+                  android:fillColor="#27B94A"
+                  android:pathData="M42,69C44,44 57,23 72,12C79,40 68,61 42,69Z"/>
+
+              <path
+                  android:fillColor="#6BDC3C"
+                  android:pathData="M39,69C39,49 45,31 60,18L57,22C47,35 42,50 42,69Z"/>
+          </vector>
+          EOF
+
           cat > apk-project/app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
+
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
               <uses-permission android:name="android.permission.INTERNET" />
@@ -94,6 +131,8 @@ jobs:
                   android:usesCleartextTraffic="true"
                   android:theme="@style/AppTheme"
                   android:label="ComBio Energia"
+                  android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher"
                   android:hardwareAccelerated="true">
 
                   <activity
@@ -113,32 +152,12 @@ jobs:
           </manifest>
           EOF
 
-      - name: Criar tema
-        run: |
-          mkdir -p apk-project/app/src/main/res/values
-
-          cat > apk-project/app/src/main/res/values/styles.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-                  <item name="android:fontFamily">sans</item>
-                  <item name="android:windowActionModeOverlay">true</item>
-                  <item name="android:colorAccent">#2E7D32</item>
-                  <item name="android:navigationBarColor">#000000</item>
-                  <item name="android:statusBarColor">#000000</item>
-              </style>
-          </resources>
-          EOF
-
-      - name: Criar aplicativo Android
-        run: |
           cat > apk-project/app/src/main/java/com/combio/energia/MainActivity.java <<'EOF'
           package com.combio.energia;
 
           import android.Manifest;
           import android.app.Activity;
           import android.content.Intent;
-          import android.content.pm.PackageManager;
           import android.net.Uri;
           import android.os.Bundle;
           import android.webkit.GeolocationPermissions;
@@ -153,6 +172,7 @@ jobs:
 
               private WebView webView;
               private ValueCallback<Uri[]> fileCallback;
+
               private static final int FILE_CHOOSER = 1001;
               private static final int PERMISSIONS = 1002;
 
@@ -187,103 +207,7 @@ jobs:
 
                       @Override
                       public void onPermissionRequest(PermissionRequest request) {
+
                           runOnUiThread(() -> {
                               request.grant(request.getResources());
                           });
-                      }
-
-                      @Override
-                      public boolean onShowFileChooser(
-                              WebView webView,
-                              ValueCallback<Uri[]> callback,
-                              FileChooserParams params) {
-
-                          fileCallback = callback;
-
-                          Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                          intent.addCategory(Intent.CATEGORY_OPENABLE);
-                          intent.setType("*/*");
-
-                          startActivityForResult(
-                                  Intent.createChooser(intent, "Selecionar arquivo"),
-                                  FILE_CHOOSER
-                          );
-
-                          return true;
-                      }
-                  });
-
-                  if (android.os.Build.VERSION.SDK_INT >= 23) {
-                      requestPermissions(
-                              new String[]{
-                                      Manifest.permission.CAMERA,
-                                      Manifest.permission.ACCESS_FINE_LOCATION,
-                                      Manifest.permission.ACCESS_COARSE_LOCATION
-                              },
-                              PERMISSIONS
-                      );
-                  }
-
-                  webView.loadUrl("file:///android_asset/index.html");
-              }
-
-              @Override
-              protected void onActivityResult(
-                      int requestCode,
-                      int resultCode,
-                      Intent data) {
-
-                  super.onActivityResult(requestCode, resultCode, data);
-
-                  if (requestCode == FILE_CHOOSER && fileCallback != null) {
-
-                      Uri[] results = null;
-
-                      if (resultCode == RESULT_OK && data != null) {
-                          Uri uri = data.getData();
-
-                          if (uri != null) {
-                              results = new Uri[]{uri};
-                          }
-                      }
-
-                      fileCallback.onReceiveValue(results);
-                      fileCallback = null;
-                  }
-              }
-
-              @Override
-              public void onBackPressed() {
-                  if (webView.canGoBack()) {
-                      webView.goBack();
-                  } else {
-                      super.onBackPressed();
-                  }
-              }
-          }
-          EOF
-
-      - name: Configurar Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Configurar Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Criar Gradle Wrapper
-        working-directory: apk-project
-        run: gradle wrapper --gradle-version 8.9
-
-      - name: Gerar APK
-        working-directory: apk-project
-        run: ./gradlew assembleDebug
-
-      - name: Disponibilizar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ComBio-Atual-APK
-          path: apk-project/app/build/outputs/apk/debug/*.apk
