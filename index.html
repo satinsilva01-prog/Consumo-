@@ -134,6 +134,14 @@ main{padding:0 9px;min-width:0}.selector{display:grid;grid-template-columns:1fr 
 
 <style id="combio-ocorrencias-v1">.combio-occ-card{border:1px solid #cfd8dc;border-radius:14px;padding:14px;margin:10px 0;background:#fff}.combio-occ-btn{width:100%;padding:13px;border:0;border-radius:12px;background:#087a43;color:#fff;font-weight:700}.combio-occ-form{display:none;margin-top:10px}.combio-occ-form.show{display:block}.combio-occ-form textarea{width:100%;min-height:90px;box-sizing:border-box;padding:10px;border:1px solid #cfd8dc;border-radius:10px}.combio-occ-actions{display:flex;gap:8px;margin-top:8px}.combio-occ-actions button{flex:1;padding:10px;border:0;border-radius:10px;font-weight:700}</style>
 
+<style id="combio-equipe-status-v1">
+.combio-equipe-status{margin:8px 12px 10px;padding:10px 12px;border:1px solid #d7e1dc;border-radius:12px;background:#f7faf8;font-size:12px;color:#24332b}
+.combio-equipe-status .eq-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:900}
+.combio-equipe-status .eq-members{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.combio-equipe-status .eq-member{padding:5px 8px;border-radius:999px;background:#fff;border:1px solid #d7e1dc}
+.combio-equipe-status .on{font-weight:900}
+.combio-equipe-status .off{opacity:.55}
+</style>
 <!-- COMBIO FIREBASE — ponte de autenticação anônima (primeira etapa) -->
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -189,7 +197,7 @@ main{padding:0 9px;min-width:0}.selector{display:grid;grid-template-columns:1fr 
 <div class="app">
 <header class="header">
 <div class="brand"><div class="logo"><svg viewBox="0 0 80 80"><path d="M39 69C18 60 8 40 18 14c18 2 31 13 35 30C55 57 47 66 39 69Z" fill="#6bdc3c"/><path d="M42 69C44 44 57 23 72 12c7 28-4 49-30 57Z" fill="#27b94a"/><path d="M39 69C39 49 45 31 60 18" fill="none" stroke="#087a43" stroke-width="4"/></svg></div><div><b>Combio</b><small>Energia</small></div></div>
-<div class="title" id="pageTitle">CONSUMO DO SANSOM<span>Produção • Turno</span></div>
+<div class="title" id="pageTitle">CONSUMO DO SANSOM<span>Produção • Turno</span></div><div id="combioEquipeStatus" class="combio-equipe-status" style="display:none"></div>
 <div class="datebox"><strong id="date"></strong><span>Turno: 07:00 - 19:00</span><b id="environmentBadge" style="display:block;margin-top:4px;font-size:9px;padding:3px 5px;border-radius:7px;background:#f59a23;color:#111">MODO TESTE</b></div>
 </header>
 <main>
@@ -2406,6 +2414,69 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function sessionDocRef(id){
     return window.combioFirebaseDb.collection('sessions').doc(id);
   }
+  var firebaseSessionUnsub=null, firebasePresenceTimer=null;
+  function participantOnline(part){
+    if(!part || part.online===false) return false;
+    var ts=part.lastSeenAt;
+    var ms=ts && typeof ts.toMillis==='function' ? ts.toMillis() : (typeof ts==='number'?ts:Date.now());
+    return (Date.now()-ms) < 90000;
+  }
+  function renderEquipeStatus(data){
+    var el=document.getElementById('combioEquipeStatus');
+    if(!el)return;
+    if(!data || !data.team){el.style.display='none';return}
+    var parts=data.participants||{}, arr=Object.values(parts);
+    var mine=window.combioFirebaseUser && window.combioFirebaseUser.uid;
+    arr.sort(function(a,b){return (a.uid===mine?-1:0)-(b.uid===mine?-1:0)});
+    var members=arr.map(function(x){
+      var online=participantOnline(x), nome=E(x.operator||'NÃO IDENTIFICADO');
+      var op=E(x.operation||'—');
+      return '<span class="eq-member '+(online?'on':'off')+'">● '+nome+' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+op+'</span>';
+    }).join('');
+    var startedBy=data.startedByName||((arr.find(function(x){return x.uid===data.startedByUid})||{}).operator)||'—';
+    el.style.display='block';
+    el.innerHTML='<div class="eq-head"><span>EQUIPE '+E(data.team)+' · '+E(data.shiftType||'TURNO')+'</span><span>INICIADO POR: '+E(startedBy)+'</span></div><div class="eq-members">'+(members||'<span class="eq-member off">Nenhum operador</span>')+'</div>';
+  }
+  function subscribeEquipeSession(id){
+    try{
+      if(firebaseSessionUnsub) firebaseSessionUnsub();
+      if(!window.combioFirebaseDb)return;
+      firebaseSessionUnsub=sessionDocRef(id).onSnapshot(function(snap){
+        if(snap.exists){
+          var d=snap.data()||{};
+          if(d.team && d.team===state.team) renderEquipeStatus(d);
+          if(d.shiftOpen===false) return;
+          var mine=window.combioFirebaseUser&&window.combioFirebaseUser.uid, me=(d.participants||{})[mine];
+          if(me && me.operation) state.remoteMyOperation=me.operation;
+        }
+      },function(e){console.warn('[ComBio Firebase] presença:',e)});
+    }catch(e){}
+  }
+  async function firebaseTouchPresence(){
+    try{
+      await firebaseReady();
+      if(!window.combioFirebaseDb||!window.combioFirebaseUser||!state.sessionId)return;
+      var ref=sessionDocRef(state.sessionId);
+      var key='participants.'+window.combioFirebaseUser.uid;
+      var patch={};
+      patch[key+'.operator']=currentOperator();
+      patch[key+'.team']=state.team||'A';
+      patch[key+'.operation']=opKey(primaryOp()||state.active);
+      patch[key+'.deviceId']=state.deviceId;
+      patch[key+'.lastSeenAt']=firebase.firestore.FieldValue.serverTimestamp();
+      patch[key+'.online']=true;
+      await ref.update(patch);
+    }catch(e){console.warn('[ComBio Firebase] atualização de presença:',e)}
+  }
+  function startPresenceHeartbeat(){
+    if(firebasePresenceTimer)clearInterval(firebasePresenceTimer);
+    firebasePresenceTimer=setInterval(function(){if(hasTurn())firebaseTouchPresence()},30000);
+  }
+  function stopPresenceHeartbeat(){
+    if(firebasePresenceTimer)clearInterval(firebasePresenceTimer);
+    firebasePresenceTimer=null;
+  }
+
   async function firebaseJoinSession(){
     try{
       await firebaseReady();
@@ -2421,17 +2492,23 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       participants[participantId]={
         uid:participantId,operator:currentOperator(),team:state.team||'A',
         deviceId:state.deviceId,operation:opKey(primaryOp()||state.active),
-        joinedAt:firebase.firestore.FieldValue.serverTimestamp(),lastSeenAt:firebase.firestore.FieldValue.serverTimestamp()
+        joinedAt:firebase.firestore.FieldValue.serverTimestamp(),lastSeenAt:firebase.firestore.FieldValue.serverTimestamp(),online:true
       };
       var payload={
         sessionId:id,team:state.team||'A',shiftType:sh.type||currentShift(),
         shiftOpen:true,startTimestamp:existing.startTimestamp||sh.start||nowIso,
         turno:state.turno||'A',initialOperation:existing.initialOperation||primaryOp()||state.active,
+        startedByUid:existing.startedByUid||participantId,
+        startedByName:existing.startedByName||currentOperator(),
         paCarregadeira:sh.paCarregadeira||state.paCarregadeira||'',
         participants:participants,lastUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
       };
       await ref.set(payload,{merge:true});
       state.sessionId=id;
+      subscribeEquipeSession(id);
+      await firebaseTouchPresence();
+      startPresenceHeartbeat();
+      renderEquipeStatus(Object.assign({},payload,{participants:participants}));
       return true;
     }catch(e){
       console.error('[ComBio Firebase] não foi possível entrar na sessão',e);
@@ -2457,6 +2534,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       });
       state.sessionId=id;
       state.team=d.team||state.team;
+      subscribeEquipeSession(id);
+      renderEquipeStatus(d);
+      startPresenceHeartbeat();
       state.shifts=state.shifts||{};
       ['consumo','descarga'].forEach(function(o){
         state.shifts[o]=Object.assign({},state.shifts[o]||{}, {
@@ -2582,6 +2662,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     /* Ao trocar de operação, confirme no Firebase que o turno compartilhado continua aberto. */
     await firebaseLoadSharedSession();
     state.assistingOperation=primaryOp()===op?null:op;
+    firebaseTouchPresence();
     syncLegacyCount();
     if(typeof save==='function')save();
     showV78Panel(op);
@@ -2662,7 +2743,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       }
     });
     var title=document.getElementById('pageTitle');
-    if(title)title.innerHTML=(active==='consumo'?'CONSUMO DO SANSOM':'DESCARGA DE CAMINHÃO')+'<span>'+(active==='consumo'?'Produção • Turno':'Recebimento • Turno')+suffix+'</span>';
+    if(title)title.innerHTML=(active==='consumo'?'CONSUMO DO SANSOM':'DESCARGA DE CAMINHÃO')+'<span>'+(active==='consumo'?'Produção • Turno':'Recebimento • Turno')+suffix+'</span>;
+    var es=document.getElementById('combioEquipeStatus'); if(es && !hasTurn()) es.style.display='none';
     var screen=document.getElementById('operationStartScreen');
     if(screen && !hasTurn()){screen.classList.remove('v63-start-hidden');screen.style.display='flex';screen.style.pointerEvents='auto'}
   }
@@ -2700,6 +2782,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         endTime:hora,inicioTurno:inicioTurno,acoesDoTurno:acoes,quantidadeAcoesDoTurno:acoes.length,
         mensagemPadrao:resumo,whatsappMensagem:resumo
       })}catch(e){}
+      try{
+        if(window.combioFirebaseDb&&window.combioFirebaseUser&&state.sessionId){
+          var offRef=sessionDocRef(state.sessionId), offKey='participants.'+window.combioFirebaseUser.uid, offPatch={};
+          offPatch[offKey+'.online']=false;
+          offPatch[offKey+'.lastSeenAt']=firebase.firestore.FieldValue.serverTimestamp();
+          offRef.update(offPatch);
+        }
+      }catch(e){}
+      stopPresenceHeartbeat();
       if(state.shifts&&state.shifts[role]){state.shifts[role].open=false;state.shifts[role].segment=null}
       if(state.shifts){
         if(state.shifts.consumo)state.shifts.consumo.open=false;
