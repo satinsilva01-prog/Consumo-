@@ -1931,34 +1931,45 @@ function mix44(kind){
         await firebaseReady();
         if(window.combioFirebaseDb && state.sessionId){
           var ref=sessionDocRef(state.sessionId);
-          await window.combioFirebaseDb.runTransaction(async function(tx){
+          var cicloResultado=await window.combioFirebaseDb.runTransaction(async function(tx){
             var snap=await tx.get(ref), d=snap.exists?(snap.data()||{}):{};
             var so=d.sharedOperational||{}, c=so.consumo||{};
+            /* O fechamento do ciclo é decidido pelo ESTADO MAIS RECENTE DO FIREBASE.
+               Assim, se os dois celulares lançaram conchas, o ciclo leva os dois. */
+            var atuais=Object.assign({},c.operatorCurrentCounts||{});
+            var cicloTotalRemoto=Object.keys(atuais).reduce(function(t,k){return t+Number(atuais[k]||0)},0);
             var ciclos=Array.isArray(c.cycles)?c.cycles.slice():[];
-            var counts=Object.assign({},c.operatorCounts||{});
-            var novoTotal=Number(c.totalShift||0)+cicloTotal;
-            ciclos.push(ciclo);
-            /* Se o mesmo ciclo já tiver sido gravado por uma tentativa anterior,
-               não soma novamente. */
-            var ids={};
-            ciclos.forEach(function(x){if(x&&x.id)ids[x.id]=x});
-            ciclos=Object.values(ids);
-            var novoTotalCalculado=Number(c.totalShift||0);
-            if(!ids[cicloId])novoTotalCalculado=novoTotal;
-            else novoTotalCalculado=Number(c.totalShift||0)+cicloTotal;
-            tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:Object.assign({},c,{
+            var cicloExistente=ciclos.some(function(x){return x&&x.id===cicloId});
+            if(cicloExistente){
+              return {consumo:c,so:so};
+            }
+            var cicloFechado=Object.assign({},ciclo,{conchas:cicloTotalRemoto,porOperador:Object.assign({},atuais)});
+            ciclos.push(cicloFechado);
+            var seq=Number(c.cycleSeq||0)+1;
+            var novoTotal=Number(c.totalShift||0)+cicloTotalRemoto;
+            var novoConsumo=Object.assign({},c,{
               count:0,
-              totalShift:novoTotalCalculado,
-              segments:Array.isArray(c.segments)?c.segments:[],
+              totalShift:novoTotal,
               cycles:ciclos,
-              operatorCounts:counts,
+              cycleSeq:seq,
               operatorCurrentCounts:{},
               operatorCurrentMix:{},
               mix:m,
               bays:b,
               lastConchaAt:Date.now()
-            })}),operationalVersion:Date.now(),operationalWriterUid:(window.combioFirebaseUser||{}).uid||'',operationalWriterName:opAtual,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            });
+            tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:novoConsumo}),operationalVersion:Date.now(),operationalWriterUid:(window.combioFirebaseUser||{}).uid||'',operationalWriterName:opAtual,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+            return {consumo:novoConsumo,so:Object.assign({},so,{consumo:novoConsumo})};
           });
+          if(cicloResultado && cicloResultado.consumo){
+            var rc=cicloResultado.consumo;
+            state.consumo.totalShift=Number(rc.totalShift||0);
+            state.consumo.cycles=Array.isArray(rc.cycles)?rc.cycles:[];
+            state.consumo.cycleSeq=Number(rc.cycleSeq||0);
+            state.consumo.operatorCounts=Object.assign({},rc.operatorCounts||state.consumo.operatorCounts||{});
+            state.consumo.operatorCurrentCounts=Object.assign({},rc.operatorCurrentCounts||{});
+            state.consumo.operatorCurrentMix=Object.assign({},rc.operatorCurrentMix||{});
+          }
           window.__combioFirebaseSkipNextOperationalSync=true;
         }
       }catch(e){
@@ -2637,6 +2648,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     state.consumo.operatorCurrentCounts=state.consumo.operatorCurrentCounts||{};
     state.consumo.totalShift=Number(state.consumo.totalShift||0);
     state.consumo.cycles=Array.isArray(state.consumo.cycles)?state.consumo.cycles:[];
+    state.consumo.cycleSeq=Number(state.consumo.cycleSeq||0);
   }
   function currentOp(){return state.active==='descarga'?'descarga':'consumo'}
   function primaryOp(){return state.shiftRole==='descarga'?'descarga':state.shiftRole==='consumo'?'consumo':null}
@@ -2942,7 +2954,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       state.integratedShift={open:true,initialOperation:op,start:now.toISOString(),operator:nome,team:equipe,turno:turno,type:tipo,deviceId:state.deviceId,sessionId:null,paCarregadeira:pa};
       /* Só o primeiro aparelho de uma sessão nova zera o acumulado. */
       state.consumo.count=0;state.consumo.totalShift=0;
-      state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.operatorCurrentMix={};state.consumo.lastConchaAt=null;
+      state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.operatorCurrentMix={};state.consumo.cycles=[];state.consumo.cycleSeq=0;state.consumo.lastConchaAt=null;
       state.consumo.operatorCurrentMix[nome]=normalizeMixDisplay(state.consumo.mix||'');
     }
     state.shifts=state.shifts||{};
@@ -3255,7 +3267,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       }
       if(state.integratedShift){state.integratedShift.open=false;state.integratedShift.end=new Date().toISOString()}
       state.shiftRole=null;state.assistingOperation=null;state.sessionId=null;
-      state.consumo.count=0;state.consumo.totalShift=0;state.consumo.cycles=[];state.consumo.segments=[];state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.operatorCurrentMix={};
+      state.consumo.count=0;state.consumo.totalShift=0;state.consumo.cycles=[];state.consumo.cycleSeq=0;state.consumo.segments=[];state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.operatorCurrentMix={};
       state.descarga.trucks=0;state.descarga.lastTruck=null;
       if(typeof save==='function')save();
       try{if(typeof stopGPS==='function')stopGPS()}catch(e){}
@@ -3370,6 +3382,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         totalShift:Number(c.totalShift||0),
         segments:Array.isArray(c.segments)?c.segments:[],
         cycles:Array.isArray(c.cycles)?c.cycles:[],
+        cycleSeq:Number(c.cycleSeq||0),
         operatorCounts:Object.assign({},c.operatorCounts||{}),
         operatorCurrentCounts:Object.assign({},c.operatorCurrentCounts||{}),
         operatorCurrentMix:Object.assign({},c.operatorCurrentMix||{}),
@@ -3436,6 +3449,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         state.consumo.totalShift=Number(s.consumo.totalShift||0);
         state.consumo.segments=Array.isArray(s.consumo.segments)?s.consumo.segments:[];
         state.consumo.cycles=Array.isArray(s.consumo.cycles)?s.consumo.cycles:[];
+        state.consumo.cycleSeq=Number(s.consumo.cycleSeq||0);
         state.consumo.lastConchaAt=Math.max(
           Number(state.consumo.lastConchaAt||0),
           Number(s.consumo.lastConchaAt||0)
@@ -3525,6 +3539,28 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       if(!ref || !u || !state || !state.sessionId) return;
 
       var payload=sharedOperational();
+      /* Nunca deixe um celular atrasado sobrescrever um ciclo que outro celular
+         acabou de fechar. O cycleSeq é a geração do ciclo atual. */
+      var remoteSnap=await ref.get();
+      if(remoteSnap.exists){
+        var remoteData=remoteSnap.data()||{}, remoteC=((remoteData.sharedOperational||{}).consumo||{});
+        var remoteSeq=Number(remoteC.cycleSeq||0), localSeq=Number((payload.consumo||{}).cycleSeq||0);
+        if(remoteSeq>localSeq){
+          applyShared(remoteData);
+          flushEvents();
+          return;
+        }
+        /* Contadores e ciclos são dados transacionais. O sync genérico não pode
+           substituir a versão remota com uma cópia velha deste aparelho. */
+        if(remoteSeq===localSeq){
+          payload.consumo.operatorCounts=Object.assign({},remoteC.operatorCounts||{});
+          payload.consumo.operatorCurrentCounts=Object.assign({},remoteC.operatorCurrentCounts||{});
+          payload.consumo.operatorCurrentMix=Object.assign({},remoteC.operatorCurrentMix||{});
+          payload.consumo.totalShift=Number(remoteC.totalShift||0);
+          payload.consumo.cycles=Array.isArray(remoteC.cycles)?remoteC.cycles:[];
+          payload.consumo.cycleSeq=remoteSeq;
+        }
+      }
       var h=hash(payload);
       if(h===lastHash){
         flushEvents();
