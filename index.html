@@ -299,6 +299,19 @@ const defaultState={
 const $=id=>document.getElementById(id);
 function load(){try{return Object.assign(structuredClone(defaultState),JSON.parse(localStorage.getItem(KEY)||'{}'),{consumo:Object.assign(defaultState.consumo,JSON.parse(localStorage.getItem(KEY)||'{}').consumo||{}),descarga:Object.assign(defaultState.descarga,JSON.parse(localStorage.getItem(KEY)||'{}').descarga||{}, {records:(JSON.parse(localStorage.getItem(KEY)||'{}').descarga||{}).records||[]}),chats:Object.assign(defaultState.chats,JSON.parse(localStorage.getItem(KEY)||'{}').chats||{}),settings:Object.assign(defaultState.settings,JSON.parse(localStorage.getItem(KEY)||'{}').settings||{}, {whatsapp:Object.assign(defaultState.settings.whatsapp,(JSON.parse(localStorage.getItem(KEY)||'{}').settings||{}).whatsapp||{})}),shifts:Object.assign(defaultState.shifts,JSON.parse(localStorage.getItem(KEY)||'{}').shifts||{}),gps:Object.assign(defaultState.gps,JSON.parse(localStorage.getItem(KEY)||'{}').gps||{})});}catch(e){return structuredClone(defaultState)}}
 let state=load();
+/* NOVO CICLO: cada carregamento do aplicativo começa sem dados operacionais do ciclo anterior.
+   Histórico/configurações permanecem; turno, sessão, contadores e identidade operacional
+   precisam ser informados novamente. */
+(function resetOperationalOnFreshLoad(){
+  state.operator='';
+  state.sessionId=null;
+  state.shiftRole=null;
+  state.assistingOperation=null;
+  state.integratedShift=null;
+  state.consumo=Object.assign({},state.consumo||{}, {count:0,totalShift:0,segments:[],operatorCounts:{},operatorCurrentCounts:{},operatorCurrentMix:{},lastConchaAt:null});
+  state.descarga=Object.assign({},state.descarga||{}, {trucks:0,lastTruck:null,currentDraft:null,operatorCounts:{},records:[]});
+  state.shifts={consumo:{open:false,type:null,start:null,segment:null,nightId:null},descarga:{open:false,type:null,start:null,segment:null,nightId:null}};
+})();
 state.consumo.operatorCounts=state.consumo.operatorCounts||{};
 /* V33 — BASE DE TESTE LIMPA: zera somente os registros/histórico do teste atual. */
 if(localStorage.getItem('combio_v33_history_reset')!=='1'){
@@ -462,7 +475,10 @@ function log(type,extra={}){
 function audit(type,extra={}){ return log(type,{auditoria:'REGISTRADA',...extra}); }
 function logPanelOnly(type,extra={}){const e={id:crypto.randomUUID?.()||String(Date.now()+Math.random()),type,date:date(),time:time(),timestamp:iso(),operator:state.operator,team:state.team,operation:extra.operation||'SANSOM',shift:state.shifts[state.active].type,...extra};state.pendingSync.push(e);save()}
 function render(){
-  $('count').textContent=state.consumo.count;if($('totalCounterBadge')) $('totalCounterBadge').textContent='TOTAL GERAL: '+(typeof sharedTotal==='function'?sharedTotal():(Number(state.consumo.totalShift||0)+Number(state.consumo.count||0))); if($('operatorCountBadge')) $('operatorCountBadge').textContent=Object.entries(state.consumo.operatorCounts||{}).map(([k,v])=>k+': '+v).join(' • ')||'Operadores: —';$('trucks').textContent=state.descarga.trucks;
+  $('count').textContent=(typeof currentIndividual==='function'?currentIndividual():Number(state.consumo.count||0));
+  if($('totalCounterBadge')) $('totalCounterBadge').textContent='TOTAL DO MIX ATUAL: '+(typeof currentMixTotal==='function'?currentMixTotal():(typeof sharedTotal==='function'?sharedTotal():0));
+  if($('operatorCountBadge')) $('operatorCountBadge').innerHTML=(typeof renderOperatorMixRows==='function'?renderOperatorMixRows():'');
+  $('trucks').textContent=state.descarga.trucks;
   $('currentMix').textContent=state.consumo.mix;$('currentBays').textContent=state.consumo.bays;
   $('lastTruck').textContent=state.descarga.lastTruck||'—';if($('lastDischargeNF')){$('lastDischargeNF').textContent='NF: '+(state.descarga.records.length?((state.descarga.records[state.descarga.records.length-1].numero||state.descarga.records[state.descarga.records.length-1].notaFiscal||'—')):'—');} if($('miniCount')) $('miniCount').textContent=state.consumo.count;
   const turnoIntegradoAberto=!!(state.integratedShift&&state.integratedShift.open) ||
@@ -1698,7 +1714,7 @@ window.__combioV61OpenStart=openPopup61;window.__combioV61Start=start61;window._
 .combio-counter-modern .counter-title{text-align:center;font-size:13px;font-weight:900;letter-spacing:.4px;opacity:.72;margin-bottom:2px}
 .combio-counter-modern .counter-area{min-height:0!important}
 .combio-total-geral{display:block;width:max-content;max-width:100%;margin:14px auto 10px;background:#0b6b43;color:#fff;border-radius:14px;padding:9px 15px;font-size:15px;font-weight:950;text-align:center;box-sizing:border-box}
-.combio-operators{display:flex;flex-direction:column;gap:7px;width:100%;margin:0 auto 12px}
+.combio-operators{display:flex;flex-direction:column;gap:7px;width:100%;margin:0 auto 12px}.combio-mix-caption{font-size:10px;font-weight:900;opacity:.6;text-align:center;margin:2px 0}
 .combio-operator-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#eaf5ef;color:#0b6b43;border:1px solid rgba(11,107,67,.16);border-radius:12px;padding:8px 11px;box-sizing:border-box;min-height:38px}
 .combio-operator-name{font-size:13px;font-weight:900;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .combio-operator-row strong{font-size:16px;font-weight:950;flex:0 0 auto;background:#d7eee1;border-radius:9px;padding:3px 9px}
@@ -1882,6 +1898,8 @@ function mix44(kind){
     state.consumo.operatorCurrentCounts=state.consumo.operatorCurrentCounts||{};
     var opAtual=String(state.operator||'NÃO IDENTIFICADO').trim()||'NÃO IDENTIFICADO';
     state.consumo.operatorCurrentCounts[opAtual]=0;
+    state.consumo.operatorCurrentMix=state.consumo.operatorCurrentMix||{};
+    state.consumo.operatorCurrentMix[opAtual]=normalizeMixDisplay(m);
     state.consumo.count=0;
     state.consumo.mix=m;state.consumo.bays=b;
     save44();render();
@@ -2350,6 +2368,8 @@ function v74RenderCard(c){
   }else if(c.type==='ENCERRAMENTO DE TURNO' && c.operation==='SANSOM' && Array.isArray(c.quantidadePorMix)){
     var segs=c.quantidadePorMix.filter(function(x){return Number(x.conchas||0)>0});
     html+='<div style="margin-top:10px;line-height:1.45">'+segs.map(function(x){return '<div style="padding:8px 0;border-bottom:1px solid #e5e9ea"><b>'+Number(x.conchas||0)+' CONCHAS</b><br>Mix: '+v74Esc(x.mix||'NÃO INFORMADO')+'<br>Baia: '+v74Esc(x.baias||'NÃO INFORMADA')+'</div>'}).join('')+'<div style="font-weight:900;margin-top:10px">TOTAL: '+Number(c.totalConchas||0)+' CONCHAS</div></div>';
+    var ajuda74=Array.isArray(c.ajudaOutroOperador)?c.ajudaOutroOperador:[];
+    if(ajuda74.length){html+='<div style="margin-top:10px;padding:10px;border-radius:10px;background:#e9f7ef"><b>AJUDA DE OUTRO OPERADOR</b><br>'+ajuda74.map(function(a){return v74Esc(a.operador||'NÃO IDENTIFICADO')+' AJUDOU: '+Number(a.conchas||a.caminhoes||0)+' '+(a.conchas!==undefined?'CONCHAS':'CAMINHÕES')}).join('<br>')+'</div>';}
   }else{
     var detalhe=c.message||c.text||c.descricao||'';
     html+='<div style="white-space:pre-wrap;line-height:1.5;margin-top:8px">'+v74Esc(detalhe)+'</div>';
@@ -2361,7 +2381,7 @@ function v74History(which){
   var arr=(Array.isArray(state.actionCards)?state.actionCards:[]).filter(function(c){return (c.operation||'SANSOM')===which});
   var ev=(Array.isArray(state.events)?state.events:[]).filter(function(e){return (e.operation||'SANSOM')===which});
   var cards=arr.slice();
-  ev.forEach(function(e){if(!cards.some(function(c){return c.id&&e.actionCardId&&c.id===e.actionCardId || (c.type===e.type&&c.date===e.date&&c.time===e.time&&c.message===e.mensagemPadrao)})){cards.push({id:e.actionCardId||null,type:e.type,date:e.date,time:e.time,operator:e.operator,team:e.team,operation:e.operation,shift:e.shift,categoria:e.categoria,descricao:e.descricao,message:e.mensagemPadrao||e.message||e.text||e.descricao||e.whatsappMensagem,descricao:e.descricao||e.text||e.message||e.mensagemPadrao,categoria:e.categoria,totalDescargas:e.totalDescargas,descargasPorBiomassaBaia:e.descargasPorBiomassaBaia,quantidadePorMix:e.quantidadePorMix,totalConchas:e.totalConchas})}});
+  ev.forEach(function(e){if(!cards.some(function(c){return c.id&&e.actionCardId&&c.id===e.actionCardId || (c.type===e.type&&c.date===e.date&&c.time===e.time&&c.message===e.mensagemPadrao)})){cards.push({id:e.actionCardId||null,type:e.type,date:e.date,time:e.time,operator:e.operator,team:e.team,operation:e.operation,shift:e.shift,categoria:e.categoria,descricao:e.descricao,message:e.mensagemPadrao||e.message||e.text||e.descricao||e.whatsappMensagem,descricao:e.descricao||e.text||e.message||e.mensagemPadrao,categoria:e.categoria,totalDescargas:e.totalDescargas,descargasPorBiomassaBaia:e.descargasPorBiomassaBaia,quantidadePorMix:e.quantidadePorMix,totalConchas:e.totalConchas,ajudaOutroOperador:e.ajudaOutroOperador})}});
   cards.sort(function(a,b){return (Date.parse(b.timestamp||((b.date||'')+' '+(b.time||'')))||0)-(Date.parse(a.timestamp||((a.date||'')+' '+(a.time||'')))||0)});
   return cards.length?cards.map(v74RenderCard).join(''):'<p>Nenhum registro de '+(which==='DESCARGA'?'DESCARGA':'CONSUMO')+'.</p>';
 }
@@ -2376,7 +2396,7 @@ window.firebaseCloseSharedSession=async function(){
     var sid=state.sessionId, ref=sessionDocRef(sid);
     var zero={
       consumo:{count:0,totalShift:0,segments:[],operatorCounts:{},operatorCurrentCounts:{},lastConchaAt:0},
-      descarga:{trucks:0,lastTruck:null,currentDraft:null,records:[]}
+      descarga:{trucks:0,lastTruck:null,currentDraft:null,records:[],operatorCounts:{}}
     };
     var patch={sharedOperational:zero,shiftOpen:false,operationalVersion:Date.now(),lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()};
     patch['participants.'+window.combioFirebaseUser.uid+'.online']=false;
@@ -2391,7 +2411,7 @@ window.v74ResetAfterClose=function(){
   if(state.shifts){if(state.shifts.consumo)state.shifts.consumo.open=false;if(state.shifts.descarga)state.shifts.descarga.open=false}
   state.integratedShift=state.integratedShift||{};state.integratedShift.open=false;state.integratedShift.end=new Date().toISOString();
   if(state.consumo){state.consumo.count=0;state.consumo.totalShift=0;state.consumo.segments=[];state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.lastConchaAt=0}
-  if(state.descarga){state.descarga.trucks=0;state.descarga.lastTruck=null;state.descarga.currentDraft=null}
+  if(state.descarga){state.descarga.trucks=0;state.descarga.lastTruck=null;state.descarga.operatorCounts={};state.descarga.currentDraft=null}
   state.initialOperation=null;
   try{if(typeof stopGPS==='function')stopGPS()}catch(e){}
   try{if(typeof wakeLock!=='undefined'&&wakeLock){wakeLock.release().catch(function(){});wakeLock=null}}catch(e){}
@@ -2458,7 +2478,7 @@ function render76(which){
       html+='<div style="white-space:pre-wrap;line-height:1.55;margin-top:8px">'+esc76(c.message||'')+'</div>';
     }else if(c.type==='ENCERRAMENTO DE TURNO'&&which==='DESCARGA'&&Array.isArray(c.descargasPorBiomassaBaia)){
       var agg={};c.descargasPorBiomassaBaia.forEach(function(x){var k=(x.biomassa||'NÃO INFORMADA')+'||'+(x.baia||'NÃO INFORMADA');agg[k]=(agg[k]||0)+1});
-      html+='<div style="margin-top:8px"><b>DESCARGAS DO TURNO</b>'+Object.keys(agg).map(function(k){var p=k.split('||');return '<div style="padding:8px 0;border-bottom:1px solid #e5e9ea"><b>'+agg[k]+' CAMINHÃO(ÕES)</b><br>Biomassa: '+esc76(p[0])+'<br>Baia: '+esc76(p[1])+'</div>'}).join('')+'<div style="font-weight:900;margin-top:8px">TOTAL: '+Number(c.totalDescargas||0)+' CAMINHÕES</div></div>';
+      html+='<div style="margin-top:8px"><b>DESCARGAS DO TURNO</b>'+Object.keys(agg).map(function(k){var p=k.split('||');return '<div style="padding:8px 0;border-bottom:1px solid #e5e9ea"><b>'+agg[k]+' CAMINHÃO(ÕES)</b><br>Biomassa: '+esc76(p[0])+'<br>Baia: '+esc76(p[1])+'</div>'}).join('')+'<div style="font-weight:900;margin-top:8px">TOTAL: '+Number(c.totalDescargas||0)+' CAMINHÕES</div></div>'+(Array.isArray(c.ajudaOutroOperador)&&c.ajudaOutroOperador.length?'<div style="margin-top:8px;padding:10px;border-radius:10px;background:#e9f7ef"><b>AJUDA DE OUTRO OPERADOR</b><br>'+c.ajudaOutroOperador.map(function(a){return esc76(a.operador||'NÃO IDENTIFICADO')+' AJUDOU: '+Number(a.caminhoes||a.conchas||0)+' '+(a.caminhoes!==undefined?'CAMINHÕES':'CONCHAS')}).join('<br>')+'</div>':'');
     }else{
       html+='<div style="white-space:pre-wrap;line-height:1.55;margin-top:8px">'+esc76(c.message||'')+'</div>';
     }
@@ -2730,6 +2750,22 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function currentIndividual(){
     return Number((state.consumo.operatorCurrentCounts||{})[currentOperator()]||0);
   }
+  function currentMixTotal(){
+    var mix=normalizeMixDisplay(state.consumo.mix||'');
+    var counts=state.consumo.operatorCurrentCounts||{}, mixes=state.consumo.operatorCurrentMix||{};
+    return Object.keys(counts).reduce(function(t,k){
+      var m=normalizeMixDisplay(mixes[k]||mix);
+      return t+(m===mix?Number(counts[k]||0):0);
+    },0);
+  }
+  function renderOperatorMixRows(){
+    var counts=state.consumo.operatorCurrentCounts||{}, mixes=state.consumo.operatorCurrentMix||{}, mix=normalizeMixDisplay(state.consumo.mix||'');
+    var entries=Object.keys(counts).filter(function(k){return Number(counts[k]||0)>0 && normalizeMixDisplay(mixes[k]||mix)===mix});
+    if(!entries.length)return '<div class="combio-no-operators">Nenhuma concha no mix atual</div>';
+    return '<div class="combio-mix-caption">CONCHAS NO MIX ATUAL</div>'+entries.map(function(k){
+      return '<div class="combio-operator-row"><span class="combio-operator-name">'+esc76(k)+'</span><strong>'+Number(counts[k]||0)+'</strong></div>';
+    }).join('');
+  }
   function setIndividual(n){
     state.consumo.operatorCurrentCounts=state.consumo.operatorCurrentCounts||{};
     state.consumo.operatorCurrentCounts[currentOperator()]=Math.max(0,Number(n)||0);
@@ -2761,17 +2797,22 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     var now=new Date(), tipo=(now.getHours()>=7&&now.getHours()<19?'DIURNO':'NOTURNO');
     var equipe=state.team||((typeof suggestedTeam==='function')?suggestedTeam():'A');
 
-    /* Primeiro verifica se já existe uma sessão ativa da mesma equipe/turno.
-       Se existir, este aparelho entra nela e NÃO zera os dados do colega. */
-    var existing=null, joining=false, idPreview='sess-'+now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+'-'+tipo+'-'+equipe;
+    /* Procura somente uma sessão REALMENTE ativa, com alguém presente.
+       Sessões antigas sem operador online nunca são reutilizadas: um novo carregamento
+       do aplicativo começa um novo ciclo. O segundo celular entra na sessão que já tem colega. */
+    var existing=null, joining=false, idPreview=null;
     try{
       var u=await firebaseReady();
-      var ref=sessionDocRef(idPreview), snap=await ref.get();
-      if(snap.exists){
-        var d=snap.data()||{};
-        if(d.shiftOpen!==false && d.team===equipe && (d.shiftType||tipo)===tipo){
-          existing=d; joining=true;
-        }
+      var qs=await window.combioFirebaseDb.collection('sessoes')
+        .where('team','==',equipe).where('shiftType','==',tipo).where('shiftOpen','==',true).get();
+      qs.forEach(function(doc){
+        if(existing)return;
+        var d=doc.data()||{}, parts=d.participants||{}, hasOnline=false;
+        Object.keys(parts).forEach(function(k){if(participantOnline(parts[k]))hasOnline=true});
+        if(hasOnline){existing=d;joining=true;idPreview=doc.id;}
+      });
+      if(!joining){
+        idPreview='sess-'+now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+'-'+tipo+'-'+equipe+'-'+Date.now();
       }
     }catch(e){
       console.warn('[ComBio Firebase] verificação da sessão antes do início:',e);
@@ -2781,7 +2822,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
     state.operator=nome;state.turno=turno;state.team=equipe;state.active=op;state.shiftRole=op;state.assistingOperation=null;
     state.paCarregadeira=pa;
-    state.sessionId=joining?idPreview:null;
+    state.sessionId=idPreview;
     if(joining){
       /* Recupera o estado compartilhado antes de registrar este operador. */
       if(existing.sharedOperational){
@@ -2790,8 +2831,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
           state.consumo=state.consumo||{};
           state.consumo.operatorCounts=Object.assign({},so.consumo.operatorCounts||{});
           state.consumo.operatorCurrentCounts=Object.assign({},so.consumo.operatorCurrentCounts||{});
+          state.consumo.operatorCurrentMix=Object.assign({},so.consumo.operatorCurrentMix||{});
           state.consumo.totalShift=Number(so.consumo.totalShift||0);
           state.consumo.segments=Array.isArray(so.consumo.segments)?so.consumo.segments:[];
+          state.consumo.mix=so.consumo.mix||state.consumo.mix;
+          state.consumo.bays=so.consumo.bays||state.consumo.bays;
           state.consumo.lastConchaAt=Number(so.consumo.lastConchaAt||0);
         }
         if(so.descarga){
@@ -2807,7 +2851,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       state.integratedShift={open:true,initialOperation:op,start:now.toISOString(),operator:nome,team:equipe,turno:turno,type:tipo,deviceId:state.deviceId,sessionId:null,paCarregadeira:pa};
       /* Só o primeiro aparelho de uma sessão nova zera o acumulado. */
       state.consumo.count=0;state.consumo.totalShift=0;
-      state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.lastConchaAt=null;
+      state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.operatorCurrentMix={};state.consumo.lastConchaAt=null;
     }
     state.shifts=state.shifts||{};
     state.shifts.consumo=state.shifts.consumo||{open:false};
@@ -2819,8 +2863,6 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       segment:state.integratedShift.type==='DIURNO'?'07:00-19:00':(now.getHours()<7?'00:00-07:00':'19:00-23:59'),
       team:equipe,operator:nome,turno:turno,primary:true,sessionId:state.sessionId||sessionId(),paCarregadeira:pa
     });
-    if(!state.sessionId)state.sessionId=sessionId();
-
     var faixa=state.integratedShift.type==='DIURNO'?'07:00 às 19:00':'19:00 às 07:00';
     var msg=(joining?'ENTRADA NA SESSÃO':'INÍCIO DE TURNO')+'\n\nOperação principal: '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO')+
       '\nTurno: '+turno+'\nHorário: '+faixa+'\nHorário de início: '+time()+
@@ -2903,6 +2945,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     state.consumo.operatorCurrentCounts=state.consumo.operatorCurrentCounts||{};
     state.consumo.operatorCounts[op]=(Number(state.consumo.operatorCounts[op])||0)+1;
     state.consumo.operatorCurrentCounts[op]=(Number(state.consumo.operatorCurrentCounts[op])||0)+1;
+    state.consumo.operatorCurrentMix=state.consumo.operatorCurrentMix||{};
+    state.consumo.operatorCurrentMix[op]=normalizeMixDisplay(state.consumo.mix||'');
     state.consumo.count=state.consumo.operatorCurrentCounts[op];
 
     var agoraConcha=Date.now();
@@ -2925,9 +2969,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
           var so=d.sharedOperational||{}, c=so.consumo||{};
           var counts=Object.assign({},c.operatorCounts||{});
           var currents=Object.assign({},c.operatorCurrentCounts||{});
+          var currentMix=Object.assign({},c.operatorCurrentMix||{});
           counts[op]=(Number(counts[op])||0)+1;
           currents[op]=(Number(currents[op])||0)+1;
-          tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:Object.assign({},c,{operatorCounts:counts,operatorCurrentCounts:currents,lastConchaAt:agoraConcha})}),operationalVersion:Date.now(),operationalWriterUid:u.uid,operationalWriterName:op,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+          currentMix[op]=normalizeMixDisplay(state.consumo.mix||'');
+          tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:Object.assign({},c,{operatorCounts:counts,operatorCurrentCounts:currents,operatorCurrentMix:currentMix,mix:state.consumo.mix||'',bays:state.consumo.bays||'',lastConchaAt:agoraConcha})}),operationalVersion:Date.now(),operationalWriterUid:u.uid,operationalWriterName:op,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
         });
       }catch(e){
         window.__combioFirebaseSkipNextOperationalSync=false;
@@ -2951,8 +2997,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     if(cur<=0){toast('Não há conchas deste operador para corrigir.');return}
     state.consumo.operatorCounts[op]=Math.max(0,Number(state.consumo.operatorCounts[op]||0)-1);
     state.consumo.operatorCurrentCounts[op]=Math.max(0,cur-1);
+    state.consumo.operatorCurrentMix=state.consumo.operatorCurrentMix||{};
+    state.consumo.operatorCurrentMix[op]=normalizeMixDisplay(state.consumo.mix||'');
     state.consumo.count=currentIndividual();
     try{if(typeof log==='function')log('CORREÇÃO DE CONTAGEM',{alteracao:'-1 concha',valorAnterior:cur,valorNovo:cur-1,operadorConcha:op,sessionId:state.sessionId})}catch(e){}
+    (async function(){try{await firebaseReady();if(window.combioFirebaseDb&&state.sessionId){var ref=sessionDocRef(state.sessionId);await window.combioFirebaseDb.runTransaction(async function(tx){var snap=await tx.get(ref),d=snap.exists?(snap.data()||{}):{},so=d.sharedOperational||{},c=so.consumo||{},counts=Object.assign({},c.operatorCounts||{}),curr=Object.assign({},c.operatorCurrentCounts||{}),mixes=Object.assign({},c.operatorCurrentMix||{});counts[op]=Math.max(0,Number(counts[op]||0)-1);curr[op]=Math.max(0,Number(curr[op]||0)-1);mixes[op]=normalizeMixDisplay(state.consumo.mix||'');tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:Object.assign({},c,{operatorCounts:counts,operatorCurrentCounts:curr,operatorCurrentMix:mixes,mix:state.consumo.mix||'',bays:state.consumo.bays||''})}),operationalVersion:Date.now(),operationalWriterUid:window.combioFirebaseUser.uid,operationalWriterName:op,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})})}}catch(e){console.warn('[ComBio Firebase] correção não sincronizada:',e)}})();
     if(typeof save==='function')save();if(typeof render==='function')render();updateV78UI();toast('1 concha retirada');
   }
 
@@ -2966,8 +3015,14 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         var so=d.sharedOperational||{}, sd=so.descarga||{};
         var atual=Math.max(0,Number(sd.trucks||0));
         var novo=Math.max(0,atual+Number(delta||0));
+        var counts=Object.assign({},sd.operatorCounts||{});
+        var opName=String(state.operator||'NÃO IDENTIFICADO').trim()||'NÃO IDENTIFICADO';
+        var opAtual=Math.max(0,Number(counts[opName]||0));
+        var opNovo=Math.max(0,opAtual+Number(delta||0));
+        counts[opName]=opNovo;
         var patch={};
         patch['sharedOperational.descarga.trucks']=novo;
+        patch['sharedOperational.descarga.operatorCounts']=counts;
         patch.operationalVersion=Date.now();
         patch.operationalWriterUid=uid;
         patch.operationalWriterName=state.operator||'NÃO IDENTIFICADO';
@@ -2980,17 +3035,12 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function renderV78(){
     ensureV78();
     syncLegacyCount();
-    var total=sharedTotal(), indiv=currentIndividual();
+    var totalMix=currentMixTotal(), indiv=currentIndividual();
     var tb=document.getElementById('totalCounterBadge'), oc=document.getElementById('operatorCountBadge'), cc=document.getElementById('count');
-    if(tb)tb.textContent='TOTAL GERAL: '+total;
+    if(tb)tb.textContent='TOTAL DO MIX ATUAL: '+totalMix;
     if(cc)cc.textContent=indiv;
-    if(oc){
-      var entries=Object.entries(state.consumo.operatorCounts||{}).filter(function(x){return Number(x[1]||0)>0});
-      oc.innerHTML=entries.length?entries.map(function(x){
-        return '<div class="combio-operator-row"><span class="combio-operator-name">'+esc76(x[0])+'</span><strong>'+Number(x[1]||0)+'</strong></div>';
-      }).join(''):'<div class="combio-no-operators">Nenhum operador lançou conchas ainda</div>';
-      oc.title=entries.map(function(x){return x[0]+': '+x[1]}).join(' • ');
-    }
+    if(oc){oc.innerHTML=renderOperatorMixRows();}
+
     var mode=document.getElementById('modeText');
     if(mode)mode.textContent=state.assistingOperation==='consumo'?'MODO AUXÍLIO • '+currentOperator()+' lançando no CONSUMO':'TOQUE NO CONTADOR PARA SOMAR';
     updateV78UI();
@@ -3012,7 +3062,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       }
     });
     var title=document.getElementById('pageTitle');
-    if(title)title.innerHTML=(active==='consumo'?'CONSUMO DO SANSOM':'DESCARGA DE CAMINHÃO')+'<span>'+(active==='consumo'?'Produção • Turno':'Recebimento • Turno')+suffix+'</span>;
+    if(title)title.innerHTML=(active==='consumo'?'CONSUMO DO SANSOM':'DESCARGA DE CAMINHÃO')+'<span>'+(active==='consumo'?'Produção • Turno':'Recebimento • Turno')+suffix+'</span>';
     var es=document.getElementById('combioEquipeStatus'); if(es && !hasTurn()) es.style.display='none';
     var screen=document.getElementById('operationStartScreen');
     if(screen && !hasTurn()){screen.classList.remove('v63-start-hidden');screen.style.display='flex';screen.style.pointerEvents='auto'}
@@ -3026,6 +3076,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       return;
     }
     var role=primaryOp(), nome=currentOperator(), equipe=state.team||'—', hora=time();
+    var fechamentoOperadores={};
+    var fechamentoParticipantes={};
 
     /* Antes de montar o encerramento, lê o estado atual da sessão no Firebase.
        Isso garante que as conchas lançadas pelo operador do outro celular
@@ -3035,7 +3087,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         var closeRef=sessionDocRef(state.sessionId);
         var closeSnap=await closeRef.get();
         if(closeSnap.exists){
-          var closeData=closeSnap.data()||{}, closeSO=closeData.sharedOperational||{}, closeC=closeSO.consumo||{};
+          var closeData=closeSnap.data()||{}, closeSO=closeData.sharedOperational||{}, closeC=closeSO.consumo||{}, closeD=closeSO.descarga||{};
+          fechamentoParticipantes=closeData.participants||{};
           if(closeC.operatorCounts){
             state.consumo.operatorCounts=Object.assign({},closeC.operatorCounts);
           }
@@ -3043,6 +3096,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
             state.consumo.operatorCurrentCounts=Object.assign({},closeC.operatorCurrentCounts);
           }
           if(closeC.totalShift!==undefined)state.consumo.totalShift=Number(closeC.totalShift||0);
+          if(closeD.operatorCounts){state.descarga.operatorCounts=Object.assign({},closeD.operatorCounts);}
           syncLegacyCount();
         }
       }
@@ -3061,17 +3115,25 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       if(typeof combioOcorrenciasDoTurno==='function')combioOcorrenciasDoTurno(inicioTurno,fimTurno).forEach(function(e){if(!acoes.some(function(x){return x.id===e.id}))acoes.push(e);});
     }catch(e){}
     acoes.sort(function(a,b){return (Date.parse(a.timestamp||'')||0)-(Date.parse(b.timestamp||'')||0)});
+    var outrosConchas=Object.entries(state.consumo.operatorCounts||{}).filter(function(x){return String(x[0])!==String(nome)&&Number(x[1]||0)>0});
+    var outrosCaminhoes=Object.entries(state.descarga.operatorCounts||{}).filter(function(x){return String(x[0])!==String(nome)&&Number(x[1]||0)>0});
     var resumo='ENCERRAMENTO DE TURNO\n\nOperador: '+nome+'\nEquipe: '+equipe+
       '\nTurno: '+((state.integratedShift&&state.integratedShift.type)||'NÃO INFORMADO')+'\nHorário: '+((state.integratedShift&&state.integratedShift.type)==='DIURNO'?'07:00 às 19:00':'19:00 às 07:00')+
       '\nOperação principal: '+opKey(role)+'\nTotal geral de conchas: '+total+
       '\nAÇÕES REGISTRADAS NO TURNO: '+acoes.length;
     if(role==='consumo'){
-      resumo+='\n\nCONCHAS POR OPERADOR\n'+Object.entries(state.consumo.operatorCounts||{}).map(function(x){return x[0]+': '+Number(x[1]||0)}).join('\n');
+      resumo+='\n\nCONCHAS POR OPERADOR\n'+Object.entries(state.consumo.operatorCounts||{}).filter(function(x){return Number(x[1]||0)>0}).map(function(x){return x[0]+': '+Number(x[1]||0)+' CONCHAS'}).join('\n');
+      if(outrosConchas.length){
+        resumo+='\n\nAJUDA DE OUTRO OPERADOR\n'+outrosConchas.map(function(x){return x[0]+' AJUDOU: '+Number(x[1]||0)+' CONCHAS'}).join('\n');
+      }
+    }else if(role==='descarga' && outrosCaminhoes.length){
+      resumo+='\n\nAJUDA DE OUTRO OPERADOR\n'+outrosCaminhoes.map(function(x){return x[0]+' AJUDOU: '+Number(x[1]||0)+' CAMINHÕES'}).join('\n');
     }
     openModal('ENCERRAMENTO DE TURNO','<div style="white-space:pre-wrap;line-height:1.6;background:#f5f7f6;padding:12px;border-radius:12px">'+E(resumo)+'</div>','ENCERRAR',function(){
       try{if(typeof log==='function')log('ENCERRAMENTO DE TURNO',{
         operation:opKey(role),acao:'ENCERRAR TURNO',turnoIntegrado:true,operacaoPrincipal:opKey(role),
         totalConchas:total,conchasPorOperador:Object.assign({},state.consumo.operatorCounts||{}),
+        ajudaOutroOperador:role==='consumo'?outrosConchas.map(function(x){return {operador:x[0],conchas:Number(x[1]||0)}}):outrosCaminhoes.map(function(x){return {operador:x[0],caminhoes:Number(x[1]||0)}}),
         sessionId:state.sessionId,deviceId:state.deviceId,modoAuxilio:!!state.assistingOperation,
         endTime:hora,inicioTurno:inicioTurno,acoesDoTurno:acoes,quantidadeAcoesDoTurno:acoes.length,
         mensagemPadrao:resumo,whatsappMensagem:resumo
@@ -3093,7 +3155,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       }
       if(state.integratedShift){state.integratedShift.open=false;state.integratedShift.end=new Date().toISOString()}
       state.shiftRole=null;state.assistingOperation=null;state.sessionId=null;
-      state.consumo.count=0;state.consumo.totalShift=0;state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};
+      state.consumo.count=0;state.consumo.totalShift=0;state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.operatorCurrentMix={};
       state.descarga.trucks=0;state.descarga.lastTruck=null;
       if(typeof save==='function')save();
       try{if(typeof stopGPS==='function')stopGPS()}catch(e){}
@@ -3144,10 +3206,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   }
 
   window.__combioV78={start:startV78,end:endV78,switch:switchV78,total:sharedTotal,openStart:openStartV78};
-  /* Se este aparelho já tiver uma identificação de equipe/turno local, tenta recuperar a sessão compartilhada. */
-  firebaseReady().then(function(){
-    try{ if(state.team && state.integratedShift && state.integratedShift.open) firebaseLoadSharedSession(); }catch(e){}
-  }).catch(function(){});
+  /* NOVO CICLO: não recupera automaticamente sessão anterior ao abrir a página.
+     A entrada na sessão acontece somente após o operador informar sua identificação. */
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(bindV78,1200)});
   else setTimeout(bindV78,1200);
   setInterval(function(){
@@ -3211,13 +3271,17 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         segments:Array.isArray(c.segments)?c.segments:[],
         operatorCounts:Object.assign({},c.operatorCounts||{}),
         operatorCurrentCounts:Object.assign({},c.operatorCurrentCounts||{}),
+        operatorCurrentMix:Object.assign({},c.operatorCurrentMix||{}),
+        mix:c.mix||'',
+        bays:c.bays||'',
         lastConchaAt:Number(c.lastConchaAt||0)
       },
       descarga:{
         trucks:Number(d.trucks||0),
         lastTruck:d.lastTruck||null,
         currentDraft:draft,
-        records:records
+        records:records,
+        operatorCounts:Object.assign({},d.operatorCounts||{})
       }
     };
   }
@@ -3264,6 +3328,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         state.consumo.operatorCurrentCounts=Object.assign(
           {}, state.consumo.operatorCurrentCounts||{}, s.consumo.operatorCurrentCounts||{}
         );
+        state.consumo.operatorCurrentMix=Object.assign(
+          {}, state.consumo.operatorCurrentMix||{}, s.consumo.operatorCurrentMix||{}
+        );
+        if(s.consumo.mix)state.consumo.mix=s.consumo.mix;
+        if(s.consumo.bays)state.consumo.bays=s.consumo.bays;
         state.consumo.totalShift=Number(s.consumo.totalShift||0);
         state.consumo.segments=Array.isArray(s.consumo.segments)?s.consumo.segments:[];
         state.consumo.lastConchaAt=Math.max(
@@ -3278,6 +3347,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         /* Durante o turno, uma atualização remota nunca pode apagar um caminhão já contado neste aparelho.
            Incrementos/decrementos são sincronizados por transação; aqui apenas reconciliamos o valor recebido. */
         state.descarga.trucks=Math.max(Number(state.descarga.trucks||0),Number(s.descarga.trucks||0));
+        state.descarga.operatorCounts=Object.assign({},state.descarga.operatorCounts||{},s.descarga.operatorCounts||{});
         state.descarga.lastTruck=s.descarga.lastTruck||state.descarga.lastTruck||null;
         if(s.descarga.currentDraft)state.descarga.currentDraft=s.descarga.currentDraft;
         else if(state.descarga.currentDraft && !s.descarga.currentDraft)state.descarga.currentDraft=null;
@@ -3406,24 +3476,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         if(localUid && !parts[localUid] && state.operator){
           arr.push({operator:state.operator,operation:state.active==='consumo'?'SANSOM':'DESCARGA',online:true,lastSeenAt:Date.now()});
         }
-        var now=Date.now();
-        var html=arr.map(function(p){
-          var ts=p.lastSeenAt;
-          var ms=ts&&typeof ts.toMillis==='function'?ts.toMillis():(typeof ts==='number'?ts:now);
-          var online=p.online!==false && (now-ms<90000);
-          return '<span class="eq-member '+(online?'on':'off')+'">'+
-            (online?'🟢':'⚪')+' '+esc(p.operator||'NÃO IDENTIFICADO')+
-            ' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+esc(p.operation||'—')+
-            '</span>';
-        }).join('');
-        /* Cada celular identifica o operador que está na outra operação. */
-        var colega=arr.find(function(p){return p.uid && p.uid!==localUid && p.operator;});
-        var colegaNome=colega ? colega.operator : '—';
-        el.innerHTML='<div class="eq-head"><span>EQUIPE/TURNO <b>'+esc(d.team)+'</b> • '+esc(d.shiftType||'TURNO')+
-          '</span><span>INICIADO POR: '+esc(colegaNome)+
-          '</span></div><div class="eq-members">'+(html||'<span class="eq-member off">Aguardando operador</span>')+'</div>';
+        /* A faixa 'INICIADO POR' mostra somente o colega da OUTRA operação. */
+        renderEquipeStatus(Object.assign({},d,{participants:parts}));
       }
-
       try{if(typeof render==='function')render()}catch(e){}
       try{if(typeof renderV78==='function')renderV78()}catch(e){}
       try{if(typeof updateV78UI==='function')updateV78UI()}catch(e){}
