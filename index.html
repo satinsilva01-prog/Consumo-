@@ -133,6 +133,43 @@ main{padding:0 9px;min-width:0}.selector{display:grid;grid-template-columns:1fr 
 
 
 <style id="combio-ocorrencias-v1">.combio-occ-card{border:1px solid #cfd8dc;border-radius:14px;padding:14px;margin:10px 0;background:#fff}.combio-occ-btn{width:100%;padding:13px;border:0;border-radius:12px;background:#087a43;color:#fff;font-weight:700}.combio-occ-form{display:none;margin-top:10px}.combio-occ-form.show{display:block}.combio-occ-form textarea{width:100%;min-height:90px;box-sizing:border-box;padding:10px;border:1px solid #cfd8dc;border-radius:10px}.combio-occ-actions{display:flex;gap:8px;margin-top:8px}.combio-occ-actions button{flex:1;padding:10px;border:0;border-radius:10px;font-weight:700}</style>
+
+<!-- COMBIO FIREBASE — ponte de autenticação anônima (primeira etapa) -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  const firebaseConfig = {
+    apiKey: "AIzaSyC9sXs8TcSLcfDAxmX1xq-w3K8OomlVNus",
+    authDomain: "combio-energia.firebaseapp.com",
+    projectId: "combio-energia",
+    storageBucket: "combio-energia.firebasestorage.app",
+    messagingSenderId: "348120398391",
+    appId: "1:348120398391:web:0bb20ef63a0adfa361ddb2"
+  };
+  try {
+    if (!window.firebase) throw new Error('SDK Firebase não carregado');
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    window.combioFirebaseApp = firebase.app();
+    window.combioFirebaseAuth = firebase.auth();
+    window.combioFirebaseDb = firebase.firestore();
+    window.combioFirebaseReady = window.combioFirebaseAuth.signInAnonymously()
+      .then(function(result){
+        window.combioFirebaseUser = result.user || window.combioFirebaseAuth.currentUser;
+        console.log('[ComBio Firebase] autenticação anônima OK', window.combioFirebaseUser && window.combioFirebaseUser.uid);
+        return window.combioFirebaseUser;
+      })
+      .catch(function(error){
+        console.error('[ComBio Firebase] falha na autenticação anônima', error);
+        throw error;
+      });
+  } catch (error) {
+    console.error('[ComBio Firebase] inicialização falhou', error);
+    window.combioFirebaseReady = Promise.reject(error);
+  }
+})();
+</script>
 </head>
 <body>
 <!-- TELA INICIAL — OPERAÇÃO -->
