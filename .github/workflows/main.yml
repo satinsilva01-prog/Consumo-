@@ -13,7 +13,7 @@ jobs:
 
       - name: Extrair projeto ComBio Atual
         run: |
-          unzip -o ComBio_App_GitHub_APK_CORRIGIDO_FINAL_V2.zip -d apk-project
+          unzip -o ComBio_App_GitHub_APK_FINAL.zip -d apk-project
 
       - name: Configurar Java
         uses: actions/setup-java@v4
