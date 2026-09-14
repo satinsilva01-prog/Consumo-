@@ -2396,6 +2396,81 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function primaryOp(){return state.shiftRole==='descarga'?'descarga':state.shiftRole==='consumo'?'consumo':null}
   function hasTurn(){return !!(state.integratedShift&&state.integratedShift.open&&primaryOp())}
   function currentOperator(){return (state.operator||'NÃO IDENTIFICADO').trim()||'NÃO IDENTIFICADO'}
+
+  /* FIREBASE — SESSÃO OPERACIONAL COMPARTILHADA (1ª sincronização)
+     A mesma Equipe + Turno usa a mesma sessão nos dois aparelhos.
+     Cada aparelho/operador continua identificado individualmente. */
+  function firebaseReady(){
+    return window.combioFirebaseReady || Promise.reject(new Error('Firebase ainda não inicializado'));
+  }
+  function sessionDocRef(id){
+    return window.combioFirebaseDb.collection('sessions').doc(id);
+  }
+  async function firebaseJoinSession(){
+    try{
+      await firebaseReady();
+      if(!window.combioFirebaseDb || !window.combioFirebaseUser) return false;
+      var id=sessionId();
+      var sh=state.integratedShift||{};
+      var ref=sessionDocRef(id);
+      var snap=await ref.get();
+      var nowIso=new Date().toISOString();
+      var existing=snap.exists?snap.data():{};
+      var participantId=window.combioFirebaseUser.uid;
+      var participants=Object.assign({},existing.participants||{});
+      participants[participantId]={
+        uid:participantId,operator:currentOperator(),team:state.team||'A',
+        deviceId:state.deviceId,operation:opKey(primaryOp()||state.active),
+        joinedAt:firebase.firestore.FieldValue.serverTimestamp(),lastSeenAt:firebase.firestore.FieldValue.serverTimestamp()
+      };
+      var payload={
+        sessionId:id,team:state.team||'A',shiftType:sh.type||currentShift(),
+        shiftOpen:true,startTimestamp:existing.startTimestamp||sh.start||nowIso,
+        turno:state.turno||'A',initialOperation:existing.initialOperation||primaryOp()||state.active,
+        paCarregadeira:sh.paCarregadeira||state.paCarregadeira||'',
+        participants:participants,lastUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await ref.set(payload,{merge:true});
+      state.sessionId=id;
+      return true;
+    }catch(e){
+      console.error('[ComBio Firebase] não foi possível entrar na sessão',e);
+      return false;
+    }
+  }
+  async function firebaseLoadSharedSession(){
+    try{
+      await firebaseReady();
+      if(!window.combioFirebaseDb) return false;
+      var id=sessionId();
+      var snap=await sessionDocRef(id).get();
+      if(!snap.exists) return false;
+      var d=snap.data()||{};
+      if(d.shiftOpen===false) return false;
+      var sh=state.integratedShift||{};
+      state.integratedShift=Object.assign({},sh,{
+        open:true,team:d.team||state.team,type:d.shiftType||sh.type||currentShift(),
+        start:d.startTimestamp||sh.start||new Date().toISOString(),
+        sessionId:id,initialOperation:d.initialOperation||sh.initialOperation||primaryOp()||state.active,
+        paCarregadeira:d.paCarregadeira||state.paCarregadeira||'',
+        shared:true
+      });
+      state.sessionId=id;
+      state.team=d.team||state.team;
+      state.shifts=state.shifts||{};
+      ['consumo','descarga'].forEach(function(o){
+        state.shifts[o]=Object.assign({},state.shifts[o]||{}, {
+          open:true,type:state.integratedShift.type,startTimestamp:state.integratedShift.start,
+          team:state.team,sessionId:id,shared:true
+        });
+      });
+      updateV78UI();
+      return true;
+    }catch(e){
+      console.error('[ComBio Firebase] leitura da sessão falhou',e);
+      return false;
+    }
+  }
   function sharedTotal(){
     var c=state.consumo||{};
     var base=Number(c.totalShift||0);
@@ -2455,6 +2530,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     var msg='INÍCIO DE TURNO\n\nOperação principal: '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO')+
       '\nTurno: '+turno+'\nHorário: '+faixa+'\nHorário de início: '+time()+
       '\nOperador: '+nome+'\nEquipe: '+equipe+'\nPá carregadeira: '+pa+'\nSessão operacional: '+state.sessionId;
+    /* A gravação da sessão é feita em segundo plano; o app não fica bloqueado. */
+    firebaseJoinSession().then(function(ok){
+      if(ok) toast('Sessão da Equipe '+(state.team||'A')+' conectada ao Firebase');
+    });
     try{
       if(typeof log==='function')log('INÍCIO DE TURNO',{
         startTime:time(),turno:tipo,equipe:equipe,operador:nome,acao:'INICIAR TURNO',
@@ -2492,10 +2571,16 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     updateV78UI();
   }
 
-  function switchV78(op){
+  async function switchV78(op){
     ensureV78();
-    if(!hasTurn()){toast('Inicie o turno antes de acessar uma operação.');return}
+    if(!hasTurn()){
+      /* Este aparelho pode ter entrado depois do colega; tenta recuperar a sessão compartilhada. */
+      var joined=await firebaseLoadSharedSession();
+      if(!joined){toast('Inicie o turno antes de acessar uma operação.');return}
+    }
     state.active=op;
+    /* Ao trocar de operação, confirme no Firebase que o turno compartilhado continua aberto. */
+    await firebaseLoadSharedSession();
     state.assistingOperation=primaryOp()===op?null:op;
     syncLegacyCount();
     if(typeof save==='function')save();
@@ -2673,6 +2758,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   }
 
   window.__combioV78={start:startV78,end:endV78,switch:switchV78,total:sharedTotal,openStart:openStartV78};
+  /* Se este aparelho já tiver uma identificação de equipe/turno local, tenta recuperar a sessão compartilhada. */
+  firebaseReady().then(function(){
+    try{ if(state.team && state.integratedShift && state.integratedShift.open) firebaseLoadSharedSession(); }catch(e){}
+  }).catch(function(){});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(bindV78,1200)});
   else setTimeout(bindV78,1200);
   setInterval(function(){
