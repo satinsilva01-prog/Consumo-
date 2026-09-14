@@ -162,16 +162,58 @@ main{padding:0 9px;min-width:0}.selector{display:grid;grid-template-columns:1fr 
     window.combioFirebaseApp = firebase.app();
     window.combioFirebaseAuth = firebase.auth();
     window.combioFirebaseDb = firebase.firestore();
-    window.combioFirebaseReady = window.combioFirebaseAuth.signInAnonymously()
-      .then(function(result){
-        window.combioFirebaseUser = result.user || window.combioFirebaseAuth.currentUser;
-        console.log('[ComBio Firebase] autenticação anônima OK', window.combioFirebaseUser && window.combioFirebaseUser.uid);
-        return window.combioFirebaseUser;
-      })
-      .catch(function(error){
-        console.error('[ComBio Firebase] falha na autenticação anônima', error);
-        throw error;
+    try{
+      /* Melhora a compatibilidade em WebView/algumas redes móveis. */
+      if(window.combioFirebaseDb.settings){
+        window.combioFirebaseDb.settings({experimentalForceLongPolling:true, useFetchStreams:false});
+      }
+    }catch(e){ console.warn('[ComBio Firebase] mantendo transporte padrão do Firestore', e); }
+
+    /* A conexão só é considerada pronta quando o Firebase Auth realmente
+       entregou um usuário. Isso evita que o Firestore seja chamado antes
+       de request.auth existir. */
+    window.combioFirebaseReady = new Promise(function(resolve, reject){
+      var settled = false;
+      var timer = setTimeout(function(){
+        if(!settled){
+          settled = true;
+          reject(new Error('Tempo esgotado aguardando autenticação anônima do Firebase.'));
+        }
+      }, 15000);
+      var unsub = window.combioFirebaseAuth.onAuthStateChanged(function(user){
+        if(user && !settled){
+          settled = true;
+          clearTimeout(timer);
+          try{unsub();}catch(e){}
+          window.combioFirebaseUser = user;
+          console.log('[ComBio Firebase] autenticação pronta', user.uid);
+          resolve(user);
+        }
+      }, function(error){
+        if(!settled){
+          settled = true;
+          clearTimeout(timer);
+          try{unsub();}catch(e){}
+          console.error('[ComBio Firebase] erro de autenticação', error);
+          reject(error);
+        }
       });
+
+      /* Se não houver usuário persistido, inicia o anônimo. */
+      window.combioFirebaseAuth.currentUser || window.combioFirebaseAuth.signInAnonymously()
+        .then(function(result){
+          if(result && result.user) window.combioFirebaseUser = result.user;
+        })
+        .catch(function(error){
+          if(!settled){
+            settled = true;
+            clearTimeout(timer);
+            try{unsub();}catch(e){}
+            console.error('[ComBio Firebase] falha na autenticação anônima', error);
+            reject(error);
+          }
+        });
+    });
   } catch (error) {
     console.error('[ComBio Firebase] inicialização falhou', error);
     window.combioFirebaseReady = Promise.reject(error);
@@ -1720,7 +1762,7 @@ function period(){var h=new Date().getHours();return h>=7&&h<19?'DIURNO':'NOTURN
 function periodLabel(){return period()==='DIURNO'?'07:00 às 19:00':'19:00 às 07:00'}
 function uid(){return window.combioFirebaseUser&&window.combioFirebaseUser.uid||null}
 function db(){return window.combioFirebaseDb}
-function ready(){return window.combioFirebaseReady||Promise.reject(new Error('Firebase não pronto'))}
+function ready(){return (window.combioFirebaseReady||Promise.reject(new Error('Firebase não pronto'))).then(function(u){if(!u && window.combioFirebaseAuth)u=window.combioFirebaseAuth.currentUser;if(!u)throw new Error('Firebase autenticado sem usuário.');window.combioFirebaseUser=u;return u})}
 function teamSessionId(team){return 'sess-'+todayKey()+'-'+period()+'-'+String(team).toUpperCase()}
 function controlRef(){return db().collection('turnControls').doc(todayKey()+'_'+period())}
 function sessionRef(team){return db().collection('sessoes').doc(teamSessionId(team))}
@@ -1754,7 +1796,7 @@ async function joinOrStart(op){
   await sess.set(sessData,{merge:true});setLocalFromSession(sessData,op,name);subscribe(finalTeam);startHB(finalTeam);renderStatus(sessData);return true;
 }
 async function openStart(op){var p=$f('combioV61StartPopup');if(!p)return;p.dataset.operation=op;var title=$f('combioV61PopupTitle');if(title)title.textContent='INÍCIO DO TURNO — '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO');var name=$f('combioV61Operador');if(name)name.value='';var h=new Date().getHours();var turn=$f('combioV65Turno');if(turn){turn.value=(state&&state.team)||'A';}var hor=$f('combioV65Horario');if(hor)hor.value=h>=7&&h<19?'07:00 às 19:00':'19:00 às 07:00';p.style.display='flex';p.setAttribute('aria-hidden','false');try{var c=await activeControl();if(c&&c.team){if(turn)turn.value=c.team;showSugestao(c.team,'já confirmada em operação');}else{var sug=(typeof suggestedTeam==='function'?suggestedTeam():'A');if(turn)turn.value=sug;showSugestao(sug,'sugestão pela escala/histórico');}}catch(e){showSugestao((state&&state.team)||'A','sugestão local')}setTimeout(function(){if(name)name.focus()},80)}
-async function confirmStart(){var p=$f('combioV61StartPopup'),op=p&&p.dataset.operation||'consumo';try{await ready();var control=await activeControl();var team=selectedTeam();var first=!control||control.shiftOpen===false;if(first){var ok=confirm('⚠️ CONFIRMAÇÃO DE EQUIPE/TURNO\n\nVocê está iniciando a Equipe/Turno '+team+'.\n\nConfirma que a Equipe/Turno '+team+' é a equipe em operação?');if(!ok)return;}var joined=await joinOrStart(op);if(!joined)return; if(typeof save==='function')save();if(typeof render==='function')render();if(typeof updateV78UI==='function')updateV78UI();if(typeof showV78Panel==='function')showV78Panel(op);if(p){p.style.display='none';p.setAttribute('aria-hidden','true')}toast('Equipe/Turno '+state.team+' conectado ao Firebase');}catch(e){if(String(e.message||'').indexOf('EQUIPE_CONFLITO:')===0){var t=String(e.message).split(':')[1];alert('⚠️ EQUIPE/TURNO INCORRETO\n\nA equipe em operação é '+t+'.\nVocê deve entrar como '+t+'.')}else{console.error(e);alert('Não foi possível conectar ao Firebase. Tente novamente.')}}}
+async function confirmStart(){var p=$f('combioV61StartPopup'),op=p&&p.dataset.operation||'consumo';try{await ready();var control=await activeControl();var team=selectedTeam();var first=!control||control.shiftOpen===false;if(first){var ok=confirm('⚠️ CONFIRMAÇÃO DE EQUIPE/TURNO\n\nVocê está iniciando a Equipe/Turno '+team+'.\n\nConfirma que a Equipe/Turno '+team+' é a equipe em operação?');if(!ok)return;}var joined=await joinOrStart(op);if(!joined)return; if(typeof save==='function')save();if(typeof render==='function')render();if(typeof updateV78UI==='function')updateV78UI();if(typeof showV78Panel==='function')showV78Panel(op);if(p){p.style.display='none';p.setAttribute('aria-hidden','true')}toast('Equipe/Turno '+state.team+' conectado ao Firebase');}catch(e){if(String(e.message||'').indexOf('EQUIPE_CONFLITO:')===0){var t=String(e.message).split(':')[1];alert('⚠️ EQUIPE/TURNO INCORRETO\n\nA equipe em operação é '+t+'.\nVocê deve entrar como '+t+'.')}else{console.error('[ComBio] início do turno:',e);var msg=String(e&&e.message||e||'erro desconhecido');if(msg.indexOf('permission-denied')>=0||msg.indexOf('PERMISSION_DENIED')>=0){msg='Permissão do Firestore recusada.'}else if(msg.indexOf('network')>=0||msg.indexOf('unavailable')>=0){msg='Sem comunicação com o Firestore.'}else if(msg.indexOf('Tempo esgotado')>=0){msg='O Firebase não respondeu a tempo.'}else{msg='Falha na comunicação com o Firebase.'}alert('Não foi possível conectar ao Firebase.\n\n'+msg+'\n\nTente novamente.')}}}
 async function recover(){try{await ready();var c=await activeControl();if(!c||c.shiftOpen===false)return;var team=c.team,s=await sessionRef(team).get();if(!s.exists)return;var d=s.data()||{};var u=uid();if(!u)return;var part=d.participants&&d.participants[u];if(!part)return;setLocalFromSession(d,state.active||'consumo',part.operator||state.operator||'');subscribe(team);startHB(team);renderStatus(d)}catch(e){console.warn('[ComBio] recuperação',e)}}
 function bind(){var a=$f('startConsumoBtn'),b=$f('startDescargaBtn');if(a){var n=a.cloneNode(true);a.parentNode.replaceChild(n,a);n.onclick=function(e){e.preventDefault();openStart('consumo')}}if(b){var n2=b.cloneNode(true);b.parentNode.replaceChild(n2,b);n2.onclick=function(e){e.preventDefault();openStart('descarga')}}var ok=$f('combioV61Confirm');if(ok)ok.onclick=function(e){e.preventDefault();confirmStart()};var inp=$f('combioV61Operador');if(inp)inp.onkeydown=function(e){if(e.key==='Enter')confirmStart()};recover()}
 window.__combioFirebaseEquipeFinal={openStart:openStart,confirmStart:confirmStart,recover:recover,join:joinOrStart};
@@ -1762,6 +1804,20 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 })();
 </script>
 
+<script id="combio-firebase-conexao-teste-v1">
+(function(){
+  window.combioFirebaseTestConnection=async function(){
+    try{
+      var u=await (window.combioFirebaseReady||Promise.reject(new Error('Firebase não iniciado')));
+      if(!u && window.combioFirebaseAuth)u=window.combioFirebaseAuth.currentUser;
+      if(!u)throw new Error('Sem usuário autenticado');
+      await window.combioFirebaseDb.collection('combio_conexao').doc('teste').set({uid:u.uid,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      console.log('[ComBio Firebase] TESTE OK',u.uid);
+      return true;
+    }catch(e){console.error('[ComBio Firebase] TESTE FALHOU',e);return false;}
+  };
+})();
+</script>
 </html>
 <style id="combio-v44-style">
 .statusbar{transition:background .15s ease!important}
@@ -2471,7 +2527,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
      A mesma Equipe + Turno usa a mesma sessão nos dois aparelhos.
      Cada aparelho/operador continua identificado individualmente. */
   function firebaseReady(){
-    return window.combioFirebaseReady || Promise.reject(new Error('Firebase ainda não inicializado'));
+    return (window.combioFirebaseReady || Promise.reject(new Error('Firebase ainda não inicializado'))).then(function(u){if(!u && window.combioFirebaseAuth)u=window.combioFirebaseAuth.currentUser;if(!u)throw new Error('Firebase autenticado sem usuário.');window.combioFirebaseUser=u;return u;});
   }
   function sessionDocRef(id){
     return window.combioFirebaseDb.collection('sessoes').doc(id);
