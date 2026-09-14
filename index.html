@@ -252,7 +252,7 @@ main{padding:0 9px;min-width:0}.selector{display:grid;grid-template-columns:1fr 
 <section id="consPanel" class="panel active">
  <div class="statusbar"><div><small>STATUS DA OPERAÇÃO</small>● EM OPERAÇÃO</div><strong>SANSOM</strong></div>
  <div class="chat-row"><button class="chat-top start-chat" id="chatCons">💬 INICIAR CONVERSA</button><button class="chat-top end-chat" id="endChatCons">✖ ENCERRAR CONVERSA</button></div>
- <div class="counter-card" style="position:relative"><div id="totalCounterBadge" style="position:absolute;top:10px;right:12px;background:#0b6b43;color:#fff;border-radius:12px;padding:7px 10px;font-size:12px;font-weight:900;z-index:2">TOTAL: 0</div><div id="operatorCountBadge" style="position:absolute;top:48px;right:12px;background:#eaf5ef;color:#0b6b43;border-radius:10px;padding:5px 8px;font-size:10px;font-weight:900;z-index:2;max-width:75%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Operadores: —</div><div class="counter-area" id="counterArea"><div id="count" class="count">0</div><div class="label">CONCHAS</div><div class="hint">Toque no contador para somar 1</div></div><div class="mode-row"><div class="mode" id="modeText">TOQUE NO CONTADOR PARA SOMAR</div><button class="mode-btn minus" id="minusMode">− 1</button></div></div>
+ <div class="counter-card combio-counter-modern" style="position:relative"><div class="counter-area" id="counterArea"><div class="counter-title">CONTADOR DO MIX ATUAL</div><div id="count" class="count combio-big-count">0</div><div class="label">CONCHAS</div><div class="hint">Toque no contador para somar 1</div></div><div class="combio-total-geral" id="totalCounterBadge">TOTAL GERAL: 0</div><div class="combio-operators" id="operatorCountBadge"></div><div class="mode-row"><div class="mode" id="modeText">TOQUE NO CONTADOR PARA SOMAR</div><button class="mode-btn minus" id="minusMode">− 1</button></div></div>
  <div class="info-grid"><div class="info"><small>MIX EM USO</small><strong id="currentMix">3 CVC x 2 FNS</strong></div><div class="info"><small>BAIA EM USO</small><strong id="currentBays">5 e 6</strong></div></div>
  <div class="actions"><button class="action mix" id="fimMix">⟳ TROCAR MIX</button><button class="action bay" id="fimBaia">⇄ TROCAR BAIA</button><button class="action both" id="fimMixBaia">⟳⇄ TROCAR MIX + BAIA</button><button class="action occurrence-btn" id="btnOcorrenciaConsumo" type="button">⚠️ OCORRÊNCIA</button></div>
  <div class="turn-row"><button class="turn-btn start-turn" id="startTurn">▶ INICIAR TURNO</button><button class="turn-btn end-turn" id="endTurn">■ ENCERRAR TURNO</button></div>
@@ -461,7 +461,7 @@ function log(type,extra={}){
 function audit(type,extra={}){ return log(type,{auditoria:'REGISTRADA',...extra}); }
 function logPanelOnly(type,extra={}){const e={id:crypto.randomUUID?.()||String(Date.now()+Math.random()),type,date:date(),time:time(),timestamp:iso(),operator:state.operator,team:state.team,operation:extra.operation||'SANSOM',shift:state.shifts[state.active].type,...extra};state.pendingSync.push(e);save()}
 function render(){
-  $('count').textContent=state.consumo.count;if($('totalCounterBadge')) $('totalCounterBadge').textContent='TOTAL: '+(Number(state.consumo.totalShift||0)+Number(state.consumo.count||0)); if($('operatorCountBadge')) $('operatorCountBadge').textContent=Object.entries(state.consumo.operatorCounts||{}).map(([k,v])=>k+': '+v).join(' • ')||'Operadores: —';$('trucks').textContent=state.descarga.trucks;
+  $('count').textContent=state.consumo.count;if($('totalCounterBadge')) $('totalCounterBadge').textContent='TOTAL GERAL: '+(typeof sharedTotal==='function'?sharedTotal():(Number(state.consumo.totalShift||0)+Number(state.consumo.count||0))); if($('operatorCountBadge')) $('operatorCountBadge').textContent=Object.entries(state.consumo.operatorCounts||{}).map(([k,v])=>k+': '+v).join(' • ')||'Operadores: —';$('trucks').textContent=state.descarga.trucks;
   $('currentMix').textContent=state.consumo.mix;$('currentBays').textContent=state.consumo.bays;
   $('lastTruck').textContent=state.descarga.lastTruck||'—';if($('lastDischargeNF')){$('lastDischargeNF').textContent='NF: '+(state.descarga.records.length?((state.descarga.records[state.descarga.records.length-1].numero||state.descarga.records[state.descarga.records.length-1].notaFiscal||'—')):'—');} if($('miniCount')) $('miniCount').textContent=state.consumo.count;
   const turnoIntegradoAberto=!!(state.integratedShift&&state.integratedShift.open) ||
@@ -698,6 +698,7 @@ function openDischargeDraft(){
     delete cur.numeroCaminhao;
     const record={...cur,status:'CONCLUÍDA',finalizadoEm:iso(),finalizadoHora:time()};
     state.descarga.trucks=(state.descarga.trucks||0)+1;
+    window.__combioFirebaseSkipNextOperationalSync=true;
     state.descarga.lastTruck=record.finalizadoHora;
     state.descarga.photos=state.descarga.records.filter(x=>x.photoReady).length+(record.photoReady?1:0);
     state.descarga.barcode=record.barcode||'';
@@ -705,6 +706,7 @@ function openDischargeDraft(){
     if(existingIndex>=0)state.descarga.records[existingIndex]=record;else state.descarga.records.push(record);
     log('DESCARGA REGISTRADA',{numero:record.numero,notaFiscal:record.numero,horario:record.hora,biomassa:record.biomass||null,baia:record.bay||null,marrari1:record.marrari1||null,marrari2:record.marrari2||null,marrari3:record.marrari3||null,fornecedor:record.supplier||null,transportadora:record.carrier||null,photoId:record.photoId||null,barcode:record.barcode||null,documentacao:{foto:!!record.photoReady,codigo:!!record.barcodeReady}});
     state.descarga.currentDraft=null;save();render();
+    syncDescargaDelta(1);
     openModal('DADOS GRAVADOS COM SUCESSO',`<div style="text-align:center;font-size:21px;font-weight:900;color:#075b34;margin:10px 0 16px">✅ DESCARGA GRAVADA COM SUCESSO</div><p style="text-align:center">NF nº <b>${record.numero}</b> foi salva e registrada no histórico de <b>DESCARGA</b>.</p>`,'PRÓXIMA DESCARGA',()=>{setTimeout(()=>Descarga.newDraft(),120);return true});
     return true;
   });
@@ -741,7 +743,7 @@ const Descarga={
     save();
     openDischargeDraft();
   },
-  minus(){if(!requireShift())return;if(state.descarga.trucks>0){const old=state.descarga.trucks--;const removed=state.descarga.records.pop();log('CORREÇÃO DE DESCARGA',{valorAnterior:old,valorNovo:state.descarga.trucks,registroRemovido:removed?.id||null});save();render();toast('1 caminhão retirado') }},
+  minus(){if(!requireShift())return;if(state.descarga.trucks>0){const old=state.descarga.trucks--;const removed=state.descarga.records.pop();window.__combioFirebaseSkipNextOperationalSync=true;log('CORREÇÃO DE DESCARGA',{valorAnterior:old,valorNovo:state.descarga.trucks,registroRemovido:removed?.id||null});save();render();syncDescargaDelta(-1);toast('1 caminhão retirado') }},
   photo(){if(!requireShift())return;$('photoInput').dataset.targetDraft='1';$('photoInput').click()},
   barcode(){if(!requireShift())return;return readBarcode(true)},
   chatStart(){Chat.open('descarga')},chatEnd(){Chat.close('descarga')}
@@ -1689,6 +1691,19 @@ window.__combioV61OpenStart=openPopup61;window.__combioV61Start=start61;window._
 })();
 </script>
 
+<style id="combio-counter-vertical-style">
+.combio-counter-modern{padding:18px 16px 16px!important;overflow:hidden!important}
+.combio-big-count{font-size:clamp(88px,22vw,150px)!important;line-height:.9!important;margin:4px 0 0!important;font-weight:950!important;letter-spacing:-4px!important}
+.combio-counter-modern .counter-title{text-align:center;font-size:13px;font-weight:900;letter-spacing:.4px;opacity:.72;margin-bottom:2px}
+.combio-counter-modern .counter-area{min-height:0!important}
+.combio-total-geral{display:block;width:max-content;max-width:100%;margin:14px auto 10px;background:#0b6b43;color:#fff;border-radius:14px;padding:9px 15px;font-size:15px;font-weight:950;text-align:center;box-sizing:border-box}
+.combio-operators{display:flex;flex-direction:column;gap:7px;width:100%;margin:0 auto 12px}
+.combio-operator-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#eaf5ef;color:#0b6b43;border:1px solid rgba(11,107,67,.16);border-radius:12px;padding:8px 11px;box-sizing:border-box;min-height:38px}
+.combio-operator-name{font-size:13px;font-weight:900;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combio-operator-row strong{font-size:16px;font-weight:950;flex:0 0 auto;background:#d7eee1;border-radius:9px;padding:3px 9px}
+.combio-no-operators{font-size:11px;text-align:center;opacity:.55;padding:4px}
+@media(max-width:390px){.combio-big-count{font-size:82px!important}.combio-operator-name{font-size:12px}.combio-total-geral{font-size:14px}}
+</style>
 </body>
 <script id="combio-v75-historico-descarga-completo">
 (function(){
@@ -2647,10 +2662,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     }
   }
   function sharedTotal(){
+    /* operatorCounts já representa o acumulado do turno por operador.
+       Não somar totalShift novamente, pois ele também é alimentado nos
+       fechamentos de segmento (isso duplicava as conchas). */
     var c=state.consumo||{};
-    var base=Number(c.totalShift||0);
-    var cur=c.operatorCurrentCounts||{};
-    return base+Object.values(cur).reduce(function(a,v){return a+Number(v||0)},0);
+    var counts=c.operatorCounts||{};
+    var total=Object.values(counts).reduce(function(a,v){return a+Number(v||0)},0);
+    if(total>0)return total;
+    /* Compatibilidade com dados antigos sem operatorCounts. */
+    return Number(c.totalShift||0)+Number(c.count||0);
   }
   function currentIndividual(){
     return Number((state.consumo.operatorCurrentCounts||{})[currentOperator()]||0);
@@ -2672,9 +2692,9 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   }
 
   /* O turno de cada aparelho é próprio. Só a operação escolhida fica como responsável principal. */
-  function startV78(op){
+  async function startV78(op){
     ensureV78();
-    if(hasTurn()){ 
+    if(hasTurn()){
       toast('Este celular já possui um turno iniciado em '+(primaryOp()==='consumo'?'CONSUMO':'DESCARGA')+'.');
       return;
     }
@@ -2685,33 +2705,81 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     var turno=document.getElementById('combioV65Turno')?.value||'A';
     var now=new Date(), tipo=(now.getHours()>=7&&now.getHours()<19?'DIURNO':'NOTURNO');
     var equipe=state.team||((typeof suggestedTeam==='function')?suggestedTeam():'A');
+
+    /* Primeiro verifica se já existe uma sessão ativa da mesma equipe/turno.
+       Se existir, este aparelho entra nela e NÃO zera os dados do colega. */
+    var existing=null, joining=false, idPreview='sess-'+now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+'-'+tipo+'-'+equipe;
+    try{
+      var u=await firebaseReady();
+      var ref=sessionDocRef(idPreview), snap=await ref.get();
+      if(snap.exists){
+        var d=snap.data()||{};
+        if(d.shiftOpen!==false && d.team===equipe && (d.shiftType||tipo)===tipo){
+          existing=d; joining=true;
+        }
+      }
+    }catch(e){
+      console.warn('[ComBio Firebase] verificação da sessão antes do início:',e);
+      alert('Firebase: não foi possível verificar a sessão da equipe.\n\n'+String(e&&e.message||e));
+      return;
+    }
+
     state.operator=nome;state.turno=turno;state.team=equipe;state.active=op;state.shiftRole=op;state.assistingOperation=null;
     state.paCarregadeira=pa;
-    state.sessionId=null;
-    state.integratedShift={open:true,initialOperation:op,start:now.toISOString(),operator:nome,team:equipe,turno:turno,type:tipo,deviceId:state.deviceId,sessionId:null,paCarregadeira:pa};
+    state.sessionId=joining?idPreview:null;
+    if(joining){
+      /* Recupera o estado compartilhado antes de registrar este operador. */
+      if(existing.sharedOperational){
+        var so=existing.sharedOperational;
+        if(so.consumo){
+          state.consumo=state.consumo||{};
+          state.consumo.operatorCounts=Object.assign({},so.consumo.operatorCounts||{});
+          state.consumo.operatorCurrentCounts=Object.assign({},so.consumo.operatorCurrentCounts||{});
+          state.consumo.totalShift=Number(so.consumo.totalShift||0);
+          state.consumo.segments=Array.isArray(so.consumo.segments)?so.consumo.segments:[];
+          state.consumo.lastConchaAt=Number(so.consumo.lastConchaAt||0);
+        }
+        if(so.descarga){
+          state.descarga=state.descarga||{};
+          state.descarga.trucks=Number(so.descarga.trucks||0);
+          state.descarga.lastTruck=so.descarga.lastTruck||null;
+          state.descarga.currentDraft=so.descarga.currentDraft||null;
+          state.descarga.records=Array.isArray(so.descarga.records)?so.descarga.records:[];
+        }
+      }
+      state.integratedShift={open:true,initialOperation:existing.initialOperation||op,start:existing.startTimestamp||now.toISOString(),operator:nome,team:equipe,turno:existing.turno||turno,type:existing.shiftType||tipo,deviceId:state.deviceId,sessionId:idPreview,paCarregadeira:pa,shared:true};
+    }else{
+      state.integratedShift={open:true,initialOperation:op,start:now.toISOString(),operator:nome,team:equipe,turno:turno,type:tipo,deviceId:state.deviceId,sessionId:null,paCarregadeira:pa};
+      /* Só o primeiro aparelho de uma sessão nova zera o acumulado. */
+      state.consumo.count=0;state.consumo.totalShift=0;
+      state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.lastConchaAt=null;
+    }
     state.shifts=state.shifts||{};
     state.shifts.consumo=state.shifts.consumo||{open:false};
     state.shifts.descarga=state.shifts.descarga||{open:false};
     state.shifts.consumo.open=(op==='consumo');
     state.shifts.descarga.open=(op==='descarga');
     state.shifts[op]=Object.assign({},state.shifts[op],{
-      open:true,type:tipo,start:time(),startTimestamp:now.toISOString(),
-      segment:tipo==='DIURNO'?'07:00-19:00':(now.getHours()<7?'00:00-07:00':'19:00-23:59'),
-      team:equipe,operator:nome,turno:turno,primary:true,sessionId:sessionId(),paCarregadeira:pa
+      open:true,type:state.integratedShift.type,start:time(),startTimestamp:state.integratedShift.start,
+      segment:state.integratedShift.type==='DIURNO'?'07:00-19:00':(now.getHours()<7?'00:00-07:00':'19:00-23:59'),
+      team:equipe,operator:nome,turno:turno,primary:true,sessionId:state.sessionId||sessionId(),paCarregadeira:pa
     });
-    state.consumo.count=0;state.consumo.totalShift=0;
-    state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};
-    var faixa=tipo==='DIURNO'?'07:00 às 19:00':'19:00 às 07:00';
-    var msg='INÍCIO DE TURNO\n\nOperação principal: '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO')+
+    if(!state.sessionId)state.sessionId=sessionId();
+
+    var faixa=state.integratedShift.type==='DIURNO'?'07:00 às 19:00':'19:00 às 07:00';
+    var msg=(joining?'ENTRADA NA SESSÃO':'INÍCIO DE TURNO')+'\n\nOperação principal: '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO')+
       '\nTurno: '+turno+'\nHorário: '+faixa+'\nHorário de início: '+time()+
       '\nOperador: '+nome+'\nEquipe: '+equipe+'\nPá carregadeira: '+pa+'\nSessão operacional: '+state.sessionId;
-    /* A gravação da sessão é feita em segundo plano; o app não fica bloqueado. */
-    firebaseJoinSession().then(function(ok){
-      if(ok) toast('Sessão da Equipe '+(state.team||'A')+' conectada ao Firebase');
-    });
     try{
-      if(typeof log==='function')log('INÍCIO DE TURNO',{
-        startTime:time(),turno:tipo,equipe:equipe,operador:nome,acao:'INICIAR TURNO',
+      var ok=await firebaseJoinSession();
+      if(!ok){
+        /* Não perde a operação local, mas informa claramente que a sessão não foi compartilhada. */
+        alert('Firebase: falha ao registrar esta equipe.\n\nO turno local foi aberto, mas a comunicação compartilhada não foi confirmada.');
+      }
+    }catch(e){console.warn(e)}
+    try{
+      if(typeof log==='function')log(joining?'ENTRADA NA SESSÃO':'INÍCIO DE TURNO',{
+        startTime:time(),turno:state.integratedShift.type,equipe:equipe,operador:nome,acao:joining?'ENTRAR NA SESSÃO':'INICIAR TURNO',
         operation:opKey(op),operacaoInicial:op==='consumo'?'CONSUMO':'DESCARREGAMENTO',
         turnoIntegrado:true,operacaoPrincipal:opKey(op),sessionId:state.sessionId,deviceId:state.deviceId,
         paCarregadeira:pa,mensagemPadrao:msg,whatsappMensagem:msg
@@ -2727,7 +2795,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     var popupV78=document.getElementById('combioV61StartPopup');
     if(popupV78){popupV78.style.display='none';popupV78.setAttribute('aria-hidden','true');}
     try{if(typeof startGPS==='function')startGPS();if(typeof keepAwake==='function')keepAwake();}catch(e){}
-    toast('Turno iniciado — '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO'));
+    toast((joining?'Sessão da Equipe '+equipe+' recuperada':'Turno iniciado')+' — '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO'));
   }
 
   function showV78Panel(op){
@@ -2774,7 +2842,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   /* Contagem do SANSOM: cada operador possui seu acumulado e seu segmento atual.
      O total geral é a soma de todos os operadores. */
   function addConchaV78(){
-    if(!requireV78() || currentOp()!=='consumo'){return}
+    if(!requireV78() || currentOp()!=='consumo')return;
     var op=currentOperator();
     state.consumo.operatorCounts=state.consumo.operatorCounts||{};
     state.consumo.operatorCurrentCounts=state.consumo.operatorCurrentCounts||{};
@@ -2784,6 +2852,35 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
     var agoraConcha=Date.now();
     var anteriorConcha=Number(state.consumo.lastConchaAt||0);
+    state.consumo.lastConchaAt=agoraConcha;
+    /* O contador será persistido localmente, mas a atualização remota do +1
+       é feita pela transação abaixo para não haver corrida entre celulares. */
+    window.__combioFirebaseSkipNextOperationalSync=true;
+    if(typeof save==='function')save();if(typeof render==='function')render();renderV78();
+
+    /* Grava o +1 como operação atômica no Firestore. Assim dois aparelhos
+       podem lançar conchas sem um sobrescrever o outro. */
+    (async function(){
+      try{
+        await firebaseReady();
+        if(!window.combioFirebaseDb||!state.sessionId)return;
+        var ref=sessionDocRef(state.sessionId), u=window.combioFirebaseUser;
+        await window.combioFirebaseDb.runTransaction(async function(tx){
+          var snap=await tx.get(ref), d=snap.exists?(snap.data()||{}):{};
+          var so=d.sharedOperational||{}, c=so.consumo||{};
+          var counts=Object.assign({},c.operatorCounts||{});
+          var currents=Object.assign({},c.operatorCurrentCounts||{});
+          counts[op]=(Number(counts[op])||0)+1;
+          currents[op]=(Number(currents[op])||0)+1;
+          tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:Object.assign({},c,{operatorCounts:counts,operatorCurrentCounts:currents,lastConchaAt:agoraConcha})}),operationalVersion:Date.now(),operationalWriterUid:u.uid,operationalWriterName:op,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+        });
+      }catch(e){
+        window.__combioFirebaseSkipNextOperationalSync=false;
+        console.warn('[ComBio Firebase] concha não sincronizada:',e);
+        try{if(typeof window.combioFirebaseSyncOperational?.sync==='function')window.combioFirebaseSyncOperational.sync()}catch(_){}
+      }
+    })();
+
     if(!anteriorConcha || (agoraConcha-anteriorConcha)>600000){
       try{if(typeof log==='function')log('CONCHA REGISTRADA',{
         operation:'SANSOM',conchas:1,operadorConcha:op,sessionId:state.sessionId,
@@ -2791,9 +2888,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         motivoRegistro:anteriorConcha?'INTERVALO SUPERIOR A 10 MINUTOS':'PRIMEIRA CONCHA'
       })}catch(e){}
     }
-    state.consumo.lastConchaAt=agoraConcha;
-    if(typeof save==='function')save();if(typeof render==='function')render();updateV78UI();
   }
+
   function minusConchaV78(){
     if(!requireV78() || currentOp()!=='consumo')return;
     var op=currentOperator(), cur=currentIndividual();
@@ -2805,6 +2901,27 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     if(typeof save==='function')save();if(typeof render==='function')render();updateV78UI();toast('1 concha retirada');
   }
 
+  async function syncDescargaDelta(delta){
+    try{
+      await firebaseReady();
+      if(!window.combioFirebaseDb||!window.combioFirebaseUser||!state.sessionId)return;
+      var ref=sessionDocRef(state.sessionId), uid=window.combioFirebaseUser.uid;
+      await window.combioFirebaseDb.runTransaction(async function(tx){
+        var snap=await tx.get(ref), d=snap.exists?(snap.data()||{}):{};
+        var so=d.sharedOperational||{}, sd=so.descarga||{};
+        var atual=Math.max(0,Number(sd.trucks||0));
+        var novo=Math.max(0,atual+Number(delta||0));
+        var patch={};
+        patch['sharedOperational.descarga.trucks']=novo;
+        patch.operationalVersion=Date.now();
+        patch.operationalWriterUid=uid;
+        patch.operationalWriterName=state.operator||'NÃO IDENTIFICADO';
+        patch.lastOperationalUpdate=firebase.firestore.FieldValue.serverTimestamp();
+        tx.set(ref,patch,{merge:true});
+      });
+    }catch(e){console.warn('[ComBio Firebase] ajuste de descarga não sincronizado:',e)}
+  }
+
   function renderV78(){
     ensureV78();
     syncLegacyCount();
@@ -2814,8 +2931,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     if(cc)cc.textContent=indiv;
     if(oc){
       var entries=Object.entries(state.consumo.operatorCounts||{}).filter(function(x){return Number(x[1]||0)>0});
-      oc.textContent=entries.length?entries.map(function(x){return x[0]+': '+x[1]}).join(' • '):'Operadores: —';
-      oc.title=oc.textContent;
+      oc.innerHTML=entries.length?entries.map(function(x){
+        return '<div class="combio-operator-row"><span class="combio-operator-name">'+esc76(x[0])+'</span><strong>'+Number(x[1]||0)+'</strong></div>';
+      }).join(''):'<div class="combio-no-operators">Nenhum operador lançou conchas ainda</div>';
+      oc.title=entries.map(function(x){return x[0]+': '+x[1]}).join(' • ');
     }
     var mode=document.getElementById('modeText');
     if(mode)mode.textContent=state.assistingOperation==='consumo'?'MODO AUXÍLIO • '+currentOperator()+' lançando no CONSUMO':'TOQUE NO CONTADOR PARA SOMAR';
@@ -3075,8 +3194,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
       if(s.descarga){
         state.descarga=state.descarga||{};
-        state.descarga.trucks=Number(s.descarga.trucks||0);
-        state.descarga.lastTruck=s.descarga.lastTruck||null;
+        /* Durante o turno, uma atualização remota nunca pode apagar um caminhão já contado neste aparelho.
+           Incrementos/decrementos são sincronizados por transação; aqui apenas reconciliamos o valor recebido. */
+        state.descarga.trucks=Math.max(Number(state.descarga.trucks||0),Number(s.descarga.trucks||0));
+        state.descarga.lastTruck=s.descarga.lastTruck||state.descarga.lastTruck||null;
         if(s.descarga.currentDraft)state.descarga.currentDraft=s.descarga.currentDraft;
         else if(state.descarga.currentDraft && !s.descarga.currentDraft)state.descarga.currentDraft=null;
 
@@ -3142,6 +3263,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
   async function syncOperational(){
     if(applyingRemote || window.__combioFirebaseSyncApplying) return;
+    if(window.__combioFirebaseSkipNextOperationalSync){
+      window.__combioFirebaseSkipNextOperationalSync=false;
+      return;
+    }
     try{
       await ready();
       var ref=sessionRef(), u=user();
@@ -3195,6 +3320,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       if(el && d.team){
         el.style.display='block';
         var parts=d.participants||{}, arr=Object.values(parts);
+        /* Mostra também o operador local imediatamente, mesmo enquanto o snapshot de presença ainda chega. */
+        var localUid=window.combioFirebaseUser&&window.combioFirebaseUser.uid;
+        if(localUid && !parts[localUid] && state.operator){
+          arr.push({operator:state.operator,operation:state.active==='consumo'?'SANSOM':'DESCARGA',online:true,lastSeenAt:Date.now()});
+        }
         var now=Date.now();
         var html=arr.map(function(p){
           var ts=p.lastSeenAt;
