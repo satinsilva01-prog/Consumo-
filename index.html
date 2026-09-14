@@ -1723,7 +1723,7 @@ function db(){return window.combioFirebaseDb}
 function ready(){return window.combioFirebaseReady||Promise.reject(new Error('Firebase não pronto'))}
 function teamSessionId(team){return 'sess-'+todayKey()+'-'+period()+'-'+String(team).toUpperCase()}
 function controlRef(){return db().collection('turnControls').doc(todayKey()+'_'+period())}
-function sessionRef(team){return db().collection('sessions').doc(teamSessionId(team))}
+function sessionRef(team){return db().collection('sessoes').doc(teamSessionId(team))}
 function selectedTeam(){return ($f('combioV65Turno')&&$f('combioV65Turno').value||'A').toUpperCase()}
 function operatorName(){return (($f('combioV61Operador')&&$f('combioV61Operador').value)||'').trim()}
 function showSugestao(team,source){var old=$f('combioFirebaseSugestao');if(old)old.remove();var sel=$f('combioV65Turno');if(!sel||!sel.parentNode)return;var d=document.createElement('div');d.id='combioFirebaseSugestao';d.innerHTML='<b>ESCALA / SEGURANÇA</b><br>Equipe/Turno prevista: <b>'+escf(team||'—')+'</b>'+(source?' • '+escf(source):'')+'<br>O sistema pode sugerir, mas a confirmação do primeiro operador define a equipe em operação.';sel.parentNode.insertBefore(d,sel.nextSibling)}
@@ -2474,7 +2474,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     return window.combioFirebaseReady || Promise.reject(new Error('Firebase ainda não inicializado'));
   }
   function sessionDocRef(id){
-    return window.combioFirebaseDb.collection('sessions').doc(id);
+    return window.combioFirebaseDb.collection('sessoes').doc(id);
   }
   var firebaseSessionUnsub=null, firebasePresenceTimer=null;
   function participantOnline(part){
@@ -2928,3 +2928,320 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   },1000);
 })();
 </script>
+
+
+<!-- COMBIO — FIREBASE: SINCRONIZAÇÃO OPERACIONAL ENTRE APARELHOS -->
+<script id="combio-firebase-sync-operacional-final">
+(function(){
+  'use strict';
+
+  var syncTimer=null, listeningId=null, unsubDoc=null, unsubEvents=null;
+  var applyingRemote=false, lastHash='', booted=false;
+
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });}
+
+  function ready(){
+    return window.combioFirebaseReady || Promise.reject(new Error('Firebase não pronto'));
+  }
+
+  function db(){return window.combioFirebaseDb}
+  function user(){return window.combioFirebaseUser}
+  function sessionRef(){
+    if(!db() || !state || !state.sessionId) return null;
+    return db().collection('sessoes').doc(state.sessionId);
+  }
+
+  function cleanRecord(r){
+    if(!r || typeof r!=='object') return null;
+    /* Não envia imagens/dados binários; mantém os dados operacionais da descarga. */
+    var keep=[
+      'id','numero','numeroCaminhao','data','hora','timestamp','finalizadoEm',
+      'finalizadoHora','operator','team','status','biomass','bay',
+      'marrari1','marrari2','marrari3','supplier','carrier','ticket','fluig',
+      'barcode','barcodeReady','photoReady','photoId','photoName','validated'
+    ];
+    var o={};
+    keep.forEach(function(k){if(r[k]!==undefined && r[k]!==null)o[k]=r[k]});
+    return o;
+  }
+
+  function sharedOperational(){
+    var c=state.consumo||{}, d=state.descarga||{};
+    var records=Array.isArray(d.records)?d.records.map(cleanRecord).filter(Boolean):[];
+    var draft=d.currentDraft ? cleanRecord(d.currentDraft) : null;
+    return {
+      consumo:{
+        count:Number(c.count||0),
+        totalShift:Number(c.totalShift||0),
+        segments:Array.isArray(c.segments)?c.segments:[],
+        operatorCounts:Object.assign({},c.operatorCounts||{}),
+        operatorCurrentCounts:Object.assign({},c.operatorCurrentCounts||{}),
+        lastConchaAt:Number(c.lastConchaAt||0)
+      },
+      descarga:{
+        trucks:Number(d.trucks||0),
+        lastTruck:d.lastTruck||null,
+        currentDraft:draft,
+        records:records
+      }
+    };
+  }
+
+  function hash(o){
+    try{return JSON.stringify(o)}catch(e){return String(Date.now())}
+  }
+
+  function mergeEvents(remote){
+    if(!remote || typeof remote!=='object') return false;
+    var changed=false;
+    state.events=Array.isArray(state.events)?state.events:[];
+    state.actionCards=Array.isArray(state.actionCards)?state.actionCards:[];
+
+    var byId={};
+    state.events.forEach(function(e){if(e&&e.id)byId[e.id]=e});
+    var cardsById={};
+    state.actionCards.forEach(function(c){if(c&&c.id)cardsById[c.id]=c});
+
+    if(remote.id && !byId[remote.id]){
+      state.events.push(remote);
+      changed=true;
+    }
+    if(remote.id && !cardsById[remote.id] &&
+       (remote.type==='OCORRÊNCIA' || remote.type==='DESCARGA REGISTRADA' ||
+        remote.type==='INÍCIO DE TURNO' || remote.type==='CHAMADO DE ATENÇÃO')){
+      state.actionCards.unshift(remote);
+      changed=true;
+    }
+    return changed;
+  }
+
+  function applyShared(data){
+    if(!data || !data.sharedOperational || applyingRemote) return;
+    var s=data.sharedOperational;
+    applyingRemote=true;
+    try{
+      if(s.consumo){
+        state.consumo=state.consumo||{};
+        /* Mantém contadores por operador dos dois aparelhos. */
+        state.consumo.operatorCounts=Object.assign(
+          {}, state.consumo.operatorCounts||{}, s.consumo.operatorCounts||{}
+        );
+        state.consumo.operatorCurrentCounts=Object.assign(
+          {}, state.consumo.operatorCurrentCounts||{}, s.consumo.operatorCurrentCounts||{}
+        );
+        state.consumo.totalShift=Number(s.consumo.totalShift||0);
+        state.consumo.segments=Array.isArray(s.consumo.segments)?s.consumo.segments:[];
+        state.consumo.lastConchaAt=Math.max(
+          Number(state.consumo.lastConchaAt||0),
+          Number(s.consumo.lastConchaAt||0)
+        );
+        if(typeof syncLegacyCount==='function')syncLegacyCount();
+      }
+
+      if(s.descarga){
+        state.descarga=state.descarga||{};
+        state.descarga.trucks=Number(s.descarga.trucks||0);
+        state.descarga.lastTruck=s.descarga.lastTruck||null;
+        if(s.descarga.currentDraft)state.descarga.currentDraft=s.descarga.currentDraft;
+        else if(state.descarga.currentDraft && !s.descarga.currentDraft)state.descarga.currentDraft=null;
+
+        if(Array.isArray(s.descarga.records)){
+          var local=Array.isArray(state.descarga.records)?state.descarga.records:[];
+          var map={};
+          local.forEach(function(r){if(r&&r.id)map[r.id]=r});
+          s.descarga.records.forEach(function(r){
+            if(r&&r.id)map[r.id]=Object.assign({},map[r.id]||{},r);
+          });
+          state.descarga.records=Object.values(map);
+        }
+      }
+
+      state._firebaseOperationalVersion=Number(data.operationalVersion||Date.now());
+      if(typeof save==='function'){
+        /* Grava localmente sem disparar outro envio enquanto aplica o remoto. */
+        var old=window.__combioFirebaseSyncApplying;
+        window.__combioFirebaseSyncApplying=true;
+        try{save()}catch(e){}
+        window.__combioFirebaseSyncApplying=old;
+      }
+      try{if(typeof render==='function')render()}catch(e){}
+      try{if(typeof renderV78==='function')renderV78()}catch(e){}
+      try{if(typeof updateV78UI==='function')updateV78UI()}catch(e){}
+    }catch(e){
+      console.warn('[ComBio Firebase] erro ao aplicar estado compartilhado',e);
+    }finally{
+      applyingRemote=false;
+    }
+  }
+
+  async function flushEvents(){
+    try{
+      await ready();
+      var ref=sessionRef(), u=user();
+      if(!ref || !u || !state || !Array.isArray(state.pendingSync))return;
+      var pending=state.pendingSync.slice();
+      if(!pending.length)return;
+
+      for(var i=0;i<pending.length;i++){
+        var ev=pending[i];
+        if(!ev || !ev.id)continue;
+        var payload=JSON.parse(JSON.stringify(ev));
+        payload.firebaseUid=u.uid;
+        payload.firebaseSyncedAt=firebase.firestore.FieldValue.serverTimestamp();
+        await ref.collection('eventos').doc(String(ev.id)).set(payload,{merge:true});
+      }
+
+      var ids={};
+      pending.forEach(function(e){if(e&&e.id)ids[e.id]=1});
+      state.pendingSync=state.pendingSync.filter(function(e){return !(e&&ids[e.id])});
+      if(typeof save==='function'){
+        var old=window.__combioFirebaseSyncApplying;
+        window.__combioFirebaseSyncApplying=true;
+        try{save()}catch(e){}
+        window.__combioFirebaseSyncApplying=old;
+      }
+    }catch(e){
+      console.warn('[ComBio Firebase] eventos ainda não sincronizados',e);
+    }
+  }
+
+  async function syncOperational(){
+    if(applyingRemote || window.__combioFirebaseSyncApplying) return;
+    try{
+      await ready();
+      var ref=sessionRef(), u=user();
+      if(!ref || !u || !state || !state.sessionId) return;
+
+      var payload=sharedOperational();
+      var h=hash(payload);
+      if(h===lastHash){
+        flushEvents();
+        return;
+      }
+      lastHash=h;
+
+      await ref.set({
+        sharedOperational:payload,
+        operationalVersion:Date.now(),
+        operationalWriterUid:u.uid,
+        operationalWriterName:state.operator||'NÃO IDENTIFICADO',
+        team:state.team||'A',
+        turno:state.team||state.turno||'A',
+        shiftOpen:!!(state.integratedShift&&state.integratedShift.open),
+        lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()
+      },{merge:true});
+
+      flushEvents();
+    }catch(e){
+      console.warn('[ComBio Firebase] sincronização operacional falhou',e);
+    }
+  }
+
+  function scheduleSync(){
+    if(applyingRemote || window.__combioFirebaseSyncApplying)return;
+    clearTimeout(syncTimer);
+    syncTimer=setTimeout(syncOperational,350);
+  }
+
+  function subscribe(id){
+    if(!db() || !id || listeningId===id)return;
+    if(unsubDoc)try{unsubDoc()}catch(e){}
+    if(unsubEvents)try{unsubEvents()}catch(e){}
+    listeningId=id;
+
+    var ref=db().collection('sessoes').doc(id);
+
+    unsubDoc=ref.onSnapshot(function(snap){
+      if(!snap.exists)return;
+      var d=snap.data()||{};
+      applyShared(d);
+
+      var el=document.getElementById('combioEquipeStatus');
+      if(el && d.team){
+        el.style.display='block';
+        var parts=d.participants||{}, arr=Object.values(parts);
+        var now=Date.now();
+        var html=arr.map(function(p){
+          var ts=p.lastSeenAt;
+          var ms=ts&&typeof ts.toMillis==='function'?ts.toMillis():(typeof ts==='number'?ts:now);
+          var online=p.online!==false && (now-ms<90000);
+          return '<span class="eq-member '+(online?'on':'off')+'">'+
+            (online?'🟢':'⚪')+' '+esc(p.operator||'NÃO IDENTIFICADO')+
+            ' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+esc(p.operation||'—')+
+            '</span>';
+        }).join('');
+        el.innerHTML='<div class="eq-head"><span>EQUIPE/TURNO <b>'+esc(d.team)+'</b> • '+esc(d.shiftType||'TURNO')+
+          '</span><span>INICIADO POR: '+esc(d.startedByName||'—')+
+          '</span></div><div class="eq-members">'+(html||'<span class="eq-member off">Aguardando operador</span>')+'</div>';
+      }
+
+      try{if(typeof render==='function')render()}catch(e){}
+      try{if(typeof renderV78==='function')renderV78()}catch(e){}
+      try{if(typeof updateV78UI==='function')updateV78UI()}catch(e){}
+    },function(e){console.warn('[ComBio Firebase] sessão:',e)});
+
+    unsubEvents=ref.collection('eventos').onSnapshot(function(qs){
+      var changed=false;
+      qs.forEach(function(doc){
+        var ev=doc.data()||{};
+        changed=mergeEvents(ev)||changed;
+      });
+      if(changed){
+        try{if(typeof save==='function')save()}catch(e){}
+        try{if(typeof render==='function')render()}catch(e){}
+      }
+    },function(e){console.warn('[ComBio Firebase] eventos:',e)});
+  }
+
+  function hookSave(){
+    if(window.__combioFirebaseSaveWrapped)return;
+    if(typeof window.save!=='function')return;
+    var original=window.save;
+    window.save=function(){
+      var r=original.apply(this,arguments);
+      scheduleSync();
+      return r;
+    };
+    window.__combioFirebaseSaveWrapped=true;
+  }
+
+  function boot(){
+    if(booted)return;
+    booted=true;
+    hookSave();
+
+    setInterval(function(){
+      try{
+        hookSave();
+        if(state && state.sessionId){
+          subscribe(state.sessionId);
+          scheduleSync();
+        }
+      }catch(e){}
+    },1500);
+
+    /* Tenta imediatamente se a sessão já tiver sido recuperada. */
+    try{
+      if(window.combioFirebaseReady){
+        window.combioFirebaseReady.then(function(){
+          if(state && state.sessionId)subscribe(state.sessionId);
+        }).catch(function(){});
+      }
+    }catch(e){}
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,2200)});
+  }else{
+    setTimeout(boot,2200);
+  }
+
+  window.combioFirebaseSyncOperational={
+    sync:syncOperational,
+    subscribe:subscribe
+  };
+})();
+</script>
+
