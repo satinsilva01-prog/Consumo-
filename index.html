@@ -1896,12 +1896,50 @@ function mix44(kind){
 
     state.consumo.totalShift=Number(state.consumo.totalShift||0)+n;
     state.consumo.operatorCurrentCounts=state.consumo.operatorCurrentCounts||{};
-    var opAtual=String(state.operator||'NÃO IDENTIFICADO').trim()||'NÃO IDENTIFICADO';
-    state.consumo.operatorCurrentCounts[opAtual]=0;
     state.consumo.operatorCurrentMix=state.consumo.operatorCurrentMix||{};
+    var opAtual=String(state.operator||'NÃO IDENTIFICADO').trim()||'NÃO IDENTIFICADO';
+
+    /* TROCA DE MIX: zera SOMENTE o contador do operador que fez a troca.
+       Os demais operadores continuam com suas conchas do mix em que estão
+       trabalhando. O acumulado do turno (operatorCounts) nunca é zerado. */
+    state.consumo.operatorCurrentCounts[opAtual]=0;
     state.consumo.operatorCurrentMix[opAtual]=normalizeMixDisplay(m);
     state.consumo.count=0;
     state.consumo.mix=m;state.consumo.bays=b;
+
+    /* Atualização atômica no Firebase: não substitui os contadores dos outros
+       celulares. Apenas altera o operador que realizou a troca de mix. */
+    (async function(){
+      try{
+        await firebaseReady();
+        if(window.combioFirebaseDb && state.sessionId){
+          var ref=sessionDocRef(state.sessionId);
+          await window.combioFirebaseDb.runTransaction(async function(tx){
+            var snap=await tx.get(ref), d=snap.exists?(snap.data()||{}):{};
+            var so=d.sharedOperational||{}, c=so.consumo||{};
+            var counts=Object.assign({},c.operatorCounts||{});
+            var currents=Object.assign({},c.operatorCurrentCounts||{});
+            var mixes=Object.assign({},c.operatorCurrentMix||{});
+            /* Preserva integralmente os demais operadores. */
+            currents[opAtual]=0;
+            mixes[opAtual]=normalizeMixDisplay(m);
+            tx.set(ref,{sharedOperational:Object.assign({},so,{consumo:Object.assign({},c,{
+              operatorCounts:counts,
+              operatorCurrentCounts:currents,
+              operatorCurrentMix:mixes,
+              mix:m,
+              bays:b,
+              totalShift:Number(c.totalShift||state.consumo.totalShift||0)
+            })}),operationalVersion:Date.now(),operationalWriterUid:(window.combioFirebaseUser||{}).uid||'',operationalWriterName:opAtual,lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+          });
+          window.__combioFirebaseSkipNextOperationalSync=true;
+        }
+      }catch(e){
+        window.__combioFirebaseSkipNextOperationalSync=false;
+        console.warn('[ComBio Firebase] troca de mix não sincronizada:',e);
+      }
+    })();
+
     save44();render();
     if(typeof updateV78UI==='function')updateV78UI();
     setTimeout(function(){var q=document.getElementById('count');if(q)q.textContent='0'},0);
