@@ -2557,7 +2557,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   'use strict';
 
   function E(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-  function opKey(op){return op==='consumo'?'SANSOM':'DESCARGA'}
+  function opKey(op){var x=String(op||'').toUpperCase(); return (x==='CONSUMO'||x==='SANSOM')?'SANSOM':'DESCARGA'}
   function ensureV78(){
     if(!window.state)return;
     /* ID do aparelho sempre precisa existir antes de montar qualquer payload do Firestore. */
@@ -2675,10 +2675,22 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       var safeTeam=state.team||'A';
       var safeOperation=opKey(primaryOp()||state.active);
       var participants=Object.assign({},existing.participants||{});
+      /* Nunca enviar undefined ao Firestore. Alguns participantes antigos podem ter
+         sido gravados sem deviceId; eles são saneados antes do merge. */
+      Object.keys(participants).forEach(function(pid){
+        var pp=participants[pid];
+        if(!pp || typeof pp!=='object') pp={};
+        if(pp.deviceId===undefined || pp.deviceId===null || pp.deviceId==='') pp.deviceId='disp-legado-'+pid;
+        if(pp.operator===undefined || pp.operator===null) pp.operator='NÃO IDENTIFICADO';
+        if(pp.team===undefined || pp.team===null) pp.team=safeTeam;
+        if(pp.operation===undefined || pp.operation===null) pp.operation='SANSOM';
+        participants[pid]=pp;
+      });
       participants[participantId]={
         uid:participantId,operator:safeOperator,team:safeTeam,
         deviceId:safeDeviceId,operation:safeOperation,
-        joinedAt:firebase.firestore.FieldValue.serverTimestamp(),lastSeenAt:firebase.firestore.FieldValue.serverTimestamp(),online:true
+        joinedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        lastSeenAt:firebase.firestore.FieldValue.serverTimestamp(),online:true
       };
       var payload={
         sessionId:id,team:state.team||'A',shiftType:sh.type||currentShift(),
