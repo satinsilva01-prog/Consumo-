@@ -2560,7 +2560,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function opKey(op){return op==='consumo'?'SANSOM':'DESCARGA'}
   function ensureV78(){
     if(!window.state)return;
-    state.deviceId=state.deviceId||('disp-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+    /* ID do aparelho sempre precisa existir antes de montar qualquer payload do Firestore. */
+    if(!state.deviceId || typeof state.deviceId!=='string'){
+      state.deviceId='disp-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+    }
     state.sessionId=state.sessionId||null;
     state.shiftRole=state.shiftRole||null;
     state.assistingOperation=state.assistingOperation||null;
@@ -2634,11 +2637,13 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       if(!window.combioFirebaseDb||!window.combioFirebaseUser||!state.sessionId)return;
       var ref=sessionDocRef(state.sessionId);
       var key='participants.'+window.combioFirebaseUser.uid;
+      var safeDeviceId=(typeof state.deviceId==='string' && state.deviceId) ? state.deviceId : ('disp-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+      state.deviceId=safeDeviceId;
       var patch={};
       patch[key+'.operator']=currentOperator();
       patch[key+'.team']=state.team||'A';
       patch[key+'.operation']=opKey(primaryOp()||state.active);
-      patch[key+'.deviceId']=state.deviceId;
+      patch[key+'.deviceId']=safeDeviceId;
       patch[key+'.lastSeenAt']=firebase.firestore.FieldValue.serverTimestamp();
       patch[key+'.online']=true;
       await ref.update(patch);
@@ -2664,10 +2669,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       var nowIso=new Date().toISOString();
       var existing=snap.exists?snap.data():{};
       var participantId=window.combioFirebaseUser.uid;
+      var safeDeviceId=(typeof state.deviceId==='string' && state.deviceId) ? state.deviceId : ('disp-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+      state.deviceId=safeDeviceId;
+      var safeOperator=currentOperator();
+      var safeTeam=state.team||'A';
+      var safeOperation=opKey(primaryOp()||state.active);
       var participants=Object.assign({},existing.participants||{});
       participants[participantId]={
-        uid:participantId,operator:currentOperator(),team:state.team||'A',
-        deviceId:state.deviceId,operation:opKey(primaryOp()||state.active),
+        uid:participantId,operator:safeOperator,team:safeTeam,
+        deviceId:safeDeviceId,operation:safeOperation,
         joinedAt:firebase.firestore.FieldValue.serverTimestamp(),lastSeenAt:firebase.firestore.FieldValue.serverTimestamp(),online:true
       };
       var payload={
