@@ -1761,11 +1761,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
 <!-- COMBIO — REGRA DEFINITIVA EQUIPE/TURNO POR LETRA + PRIMEIRO LOGIN + PRESENÇA FIREBASE -->
 <style id="combio-firebase-equipe-regra-final">
-#combioEquipeStatus{display:none;position:relative;z-index:1;width:auto;box-sizing:border-box;margin:8px 10px 8px;padding:10px 11px;border:2px solid #cfdad4;border-radius:12px;background:#f7faf8;font-size:12px;color:#24332b;clear:both;overflow:hidden}
-#combioEquipeStatus .eq-head{display:flex;flex-direction:column;gap:4px;font-weight:900;line-height:1.45}
-#combioEquipeStatus .eq-members{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-#combioEquipeStatus .eq-member{padding:6px 9px;border-radius:999px;background:#fff;border:1px solid #d7e1dc;font-weight:800}
-#combioEquipeStatus .eq-member.off{opacity:.55}
+#combioEquipeStatus{display:none;position:relative;z-index:1;width:auto;box-sizing:border-box;margin:5px 10px 6px;padding:7px 10px;border:1.5px solid #cfdad4;border-radius:10px;background:#f7faf8;font-size:11px;color:#24332b;clear:both;overflow:hidden}
+#combioEquipeStatus .eq-head{display:flex;flex-direction:column;gap:2px;font-weight:900;line-height:1.25}
 #combioFirebaseSugestao{font-size:12px;margin:8px 0;padding:9px 10px;border-radius:10px;background:#f3f7f4;border:1px solid #d7e1dc;line-height:1.45}
 </style>
 <script id="combio-firebase-equipe-regra-final-js">
@@ -2164,8 +2161,40 @@ function v73DischargeSummary(){
     })()
   };
 }
-function v73Close(){
+async function v73Close(){
   if(!v73ShiftOpen()){toast('Não há turno aberto');return}
+  /* Antes do fechamento, sempre lê a sessão compartilhada para incluir
+     os lançamentos feitos pelo outro operador/aparelho. */
+  try{
+    if(state.sessionId && window.combioFirebaseDb){
+      if(window.combioFirebaseAuthReady)await window.combioFirebaseAuthReady;
+      var ref=window.combioFirebaseDb.collection('sessoes').doc(state.sessionId);
+      if(ref){
+        var snap=await ref.get();
+        if(snap.exists){
+          var latest=snap.data()||{}, so=latest.sharedOperational||{};
+          if(so.consumo){
+            state.consumo=state.consumo||{};
+            state.consumo.operatorCounts=Object.assign({},state.consumo.operatorCounts||{},so.consumo.operatorCounts||{});
+            state.consumo.operatorCurrentCounts=Object.assign({},state.consumo.operatorCurrentCounts||{},so.consumo.operatorCurrentCounts||{});
+            state.consumo.totalShift=Number(so.consumo.totalShift||0);
+          }
+          if(so.descarga){
+            state.descarga=state.descarga||{};
+            state.descarga.trucks=Math.max(Number(state.descarga.trucks||0),Number(so.descarga.trucks||0));
+            if(so.descarga.lastTruck)state.descarga.lastTruck=so.descarga.lastTruck;
+            if(Array.isArray(so.descarga.records)){
+              var localRecs=Array.isArray(state.descarga.records)?state.descarga.records:[], mapRecs={};
+              localRecs.forEach(function(r){if(r&&r.id)mapRecs[r.id]=r});
+              so.descarga.records.forEach(function(r){if(r&&r.id)mapRecs[r.id]=Object.assign({},mapRecs[r.id]||{},r)});
+              state.descarga.records=Object.keys(mapRecs).map(function(k){return mapRecs[k]});
+            }
+          }
+          if(typeof save==='function')save();
+        }
+      }
+    }
+  }catch(e){ console.warn('[ComBio Firebase] não foi possível atualizar os dados antes do encerramento:',e); }
   var origin=v73Origin();
   var current=state.active==='consumo'?'consumo':'descarga';
   if(origin!==current){
@@ -2182,7 +2211,7 @@ function v73Close(){
       return e.operation==='SANSOM' && Number.isFinite(ts) && (!start||ts>=start) &&
         ['ALTERAÇÃO DE MIX','ALTERAÇÃO DE BAIA','ALTERAÇÃO DE MIX / BAIA'].indexOf(e.type)>=0;
     }).sort(function(a,b){return Date.parse(a.timestamp||'')-Date.parse(b.timestamp||'');});
-    var segs=[], total=Number(state.consumo.totalShift||0)+Number(state.consumo.count||0);
+    var segs=[], opCounts=state.consumo&&state.consumo.operatorCounts||{}, total=Object.keys(opCounts).reduce(function(t,k){return t+Number(opCounts[k]||0)},0); if(!total) total=Number(state.consumo.totalShift||0)+Number(state.consumo.count||0);
     var acumulado=0, mixInicial=(state.integratedShift&&state.integratedShift.mixInicial)||state.consumo.mix, bayInicial=(state.integratedShift&&state.integratedShift.baiasInicial)||state.consumo.bays;
     ev.forEach(function(e){
       var n=Number(e.conchas||0);
@@ -2339,11 +2368,29 @@ function v74History(which){
 /* Substitui somente a apresentação do Histórico; não altera os registros. */
 window.v74HistoryRender=function(which){return v74History(which)};
 
+/* Fecha a sessão compartilhada no Firestore e zera o estado operacional para
+   que nenhum aparelho recupere as conchas/caminhões do turno encerrado. */
+window.firebaseCloseSharedSession=async function(){
+  try{
+    if(!window.combioFirebaseDb || !window.combioFirebaseUser || !state.sessionId)return;
+    var sid=state.sessionId, ref=sessionDocRef(sid);
+    var zero={
+      consumo:{count:0,totalShift:0,segments:[],operatorCounts:{},operatorCurrentCounts:{},lastConchaAt:0},
+      descarga:{trucks:0,lastTruck:null,currentDraft:null,records:[]}
+    };
+    var patch={sharedOperational:zero,shiftOpen:false,operationalVersion:Date.now(),lastOperationalUpdate:firebase.firestore.FieldValue.serverTimestamp()};
+    patch['participants.'+window.combioFirebaseUser.uid+'.online']=false;
+    patch['participants.'+window.combioFirebaseUser.uid+'.lastSeenAt']=firebase.firestore.FieldValue.serverTimestamp();
+    await ref.set(patch,{merge:true});
+  }catch(e){console.warn('[ComBio Firebase] encerramento compartilhado:',e)}
+};
+
 /* Garante zeramento visual e retorno à tela inicial depois do encerramento. */
 window.v74ResetAfterClose=function(){
+  try{if(typeof window.firebaseCloseSharedSession==='function')window.firebaseCloseSharedSession()}catch(e){}
   if(state.shifts){if(state.shifts.consumo)state.shifts.consumo.open=false;if(state.shifts.descarga)state.shifts.descarga.open=false}
   state.integratedShift=state.integratedShift||{};state.integratedShift.open=false;state.integratedShift.end=new Date().toISOString();
-  if(state.consumo){state.consumo.count=0;state.consumo.totalShift=0;state.consumo.segments=[];state.consumo.operatorCounts={}}
+  if(state.consumo){state.consumo.count=0;state.consumo.totalShift=0;state.consumo.segments=[];state.consumo.operatorCounts={};state.consumo.operatorCurrentCounts={};state.consumo.lastConchaAt=0}
   if(state.descarga){state.descarga.trucks=0;state.descarga.lastTruck=null;state.descarga.currentDraft=null}
   state.initialOperation=null;
   try{if(typeof stopGPS==='function')stopGPS()}catch(e){}
@@ -2529,18 +2576,22 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     if(!data || !data.team){el.style.display='none';return}
     var parts=data.participants||{}, arr=Object.values(parts);
     var mine=window.combioFirebaseUser && window.combioFirebaseUser.uid;
-    arr.sort(function(a,b){return (a.uid===mine?-1:0)-(b.uid===mine?-1:0)});
-    var members=arr.map(function(x){
-      var online=participantOnline(x), nome=E(x.operator||'NÃO IDENTIFICADO');
-      var op=E(x.operation||'—');
-      return '<span class="eq-member '+(online?'on':'off')+'">● '+nome+' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+op+'</span>';
-    }).join('');
-    /* O nome mostrado em "INICIADO POR" é o colega da outra operação,
-       nunca o próprio operador deste aparelho. */
-    var other=arr.find(function(x){return x.uid && x.uid!==mine && x.operator;});
+    var myOperation=opKey(primaryOp()||state.active||'consumo');
+    /* IDENTIFICAÇÃO CRUZADA: neste aparelho mostramos somente o colega da
+       OUTRA operação. O próprio operador nunca aparece em INICIADO POR. */
+    var other=arr.find(function(x){
+      return x && x.uid && x.uid!==mine && x.operator &&
+             opKey(x.operation||'')!==myOperation && participantOnline(x);
+    });
+    /* Fallback para quando o colega ainda estiver atualizando presença. */
+    if(!other) other=arr.find(function(x){
+      return x && x.uid && x.uid!==mine && x.operator &&
+             opKey(x.operation||'')!==myOperation;
+    });
     var otherName=other ? other.operator : '—';
     el.style.display='block';
-    el.innerHTML='<div class="eq-head"><span>EQUIPE '+E(data.team)+' · '+E(data.shiftType||'TURNO')+'</span><span>INICIADO POR: '+E(otherName)+'</span></div><div class="eq-members">'+(members||'<span class="eq-member off">Nenhum operador</span>')+'</div>';
+    /* Cartão propositalmente compacto: duas linhas, sem ocupar a área do contador. */
+    el.innerHTML='<div class="eq-head"><span>EQUIPE '+E(data.team)+' · '+E(data.shiftType||'TURNO')+'</span><span>INICIADO POR: '+E(otherName)+'</span></div>';
   }
   function subscribeEquipeSession(id){
     try{
@@ -2967,14 +3018,39 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     if(screen && !hasTurn()){screen.classList.remove('v63-start-hidden');screen.style.display='flex';screen.style.pointerEvents='auto'}
   }
 
-  function endV78(){
+  async function endV78(){
     ensureV78();
     if(!hasTurn()){toast('Não há turno aberto neste celular.');return}
     if(currentOp()!==primaryOp()){
       toast('Para encerrar seu turno, volte para a operação onde ele foi iniciado: '+(primaryOp()==='consumo'?'CONSUMO':'DESCARREGAMENTO')+'.');
       return;
     }
-    var role=primaryOp(), total=sharedTotal(), nome=currentOperator(), equipe=state.team||'—', hora=time();
+    var role=primaryOp(), nome=currentOperator(), equipe=state.team||'—', hora=time();
+
+    /* Antes de montar o encerramento, lê o estado atual da sessão no Firebase.
+       Isso garante que as conchas lançadas pelo operador do outro celular
+       também entrem no resumo de encerramento. */
+    try{
+      if(window.combioFirebaseDb && state.sessionId){
+        var closeRef=sessionDocRef(state.sessionId);
+        var closeSnap=await closeRef.get();
+        if(closeSnap.exists){
+          var closeData=closeSnap.data()||{}, closeSO=closeData.sharedOperational||{}, closeC=closeSO.consumo||{};
+          if(closeC.operatorCounts){
+            state.consumo.operatorCounts=Object.assign({},closeC.operatorCounts);
+          }
+          if(closeC.operatorCurrentCounts){
+            state.consumo.operatorCurrentCounts=Object.assign({},closeC.operatorCurrentCounts);
+          }
+          if(closeC.totalShift!==undefined)state.consumo.totalShift=Number(closeC.totalShift||0);
+          syncLegacyCount();
+        }
+      }
+    }catch(e){
+      console.warn('[ComBio Firebase] não foi possível atualizar as conchas antes do encerramento:',e);
+    }
+
+    var total=sharedTotal();
     var inicioTurno=(state.integratedShift&&state.integratedShift.start)||(state.shifts&&state.shifts[role]&&state.shifts[role].startTimestamp)||'';
     var fimTurno=new Date().toISOString();
     var inicioMs=Date.parse(inicioTurno)||0;
@@ -3008,6 +3084,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
           offRef.update(offPatch);
         }
       }catch(e){}
+      try{if(typeof window.firebaseCloseSharedSession==='function')window.firebaseCloseSharedSession()}catch(e){}
       stopPresenceHeartbeat();
       if(state.shifts&&state.shifts[role]){state.shifts[role].open=false;state.shifts[role].segment=null}
       if(state.shifts){
