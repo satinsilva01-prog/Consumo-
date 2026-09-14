@@ -1753,54 +1753,22 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #combioFirebaseSugestao{font-size:12px;margin:8px 0;padding:9px 10px;border-radius:10px;background:#f3f7f4;border:1px solid #d7e1dc;line-height:1.45}
 </style>
 <script id="combio-firebase-equipe-regra-final-js">
+/* BLOCO DESATIVADO: a lógica de sessão compartilhada do V78 (duas frentes)
+   é a única responsável por iniciar/entrar na sessão. Isso evita dois handlers
+   disputando o mesmo botão e duas rotinas concorrentes de presença. */
 (function(){
-'use strict';
-function $f(id){return document.getElementById(id)}
-function escf(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-function todayKey(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function period(){var h=new Date().getHours();return h>=7&&h<19?'DIURNO':'NOTURNO'}
-function periodLabel(){return period()==='DIURNO'?'07:00 às 19:00':'19:00 às 07:00'}
-function uid(){return window.combioFirebaseUser&&window.combioFirebaseUser.uid||null}
-function db(){return window.combioFirebaseDb}
-function ready(){return (window.combioFirebaseReady||Promise.reject(new Error('Firebase não pronto'))).then(function(u){if(!u && window.combioFirebaseAuth)u=window.combioFirebaseAuth.currentUser;if(!u)throw new Error('Firebase autenticado sem usuário.');window.combioFirebaseUser=u;return u})}
-function teamSessionId(team){return 'sess-'+todayKey()+'-'+period()+'-'+String(team).toUpperCase()}
-function controlRef(){return db().collection('turnControls').doc(todayKey()+'_'+period())}
-function sessionRef(team){return db().collection('sessoes').doc(teamSessionId(team))}
-function selectedTeam(){return ($f('combioV65Turno')&&$f('combioV65Turno').value||'A').toUpperCase()}
-function operatorName(){return (($f('combioV61Operador')&&$f('combioV61Operador').value)||'').trim()}
-function showSugestao(team,source){var old=$f('combioFirebaseSugestao');if(old)old.remove();var sel=$f('combioV65Turno');if(!sel||!sel.parentNode)return;var d=document.createElement('div');d.id='combioFirebaseSugestao';d.innerHTML='<b>ESCALA / SEGURANÇA</b><br>Equipe/Turno prevista: <b>'+escf(team||'—')+'</b>'+(source?' • '+escf(source):'')+'<br>O sistema pode sugerir, mas a confirmação do primeiro operador define a equipe em operação.';sel.parentNode.insertBefore(d,sel.nextSibling)}
-async function activeControl(){await ready();var s=await controlRef().get();return s.exists?s.data():null}
-function renderStatus(d){var el=$f('combioEquipeStatus');if(!el)return;if(!d||!d.team){el.style.display='none';return}var parts=d.participants||{},arr=Object.values(parts);var mine=uid();arr.sort(function(a,b){return a.uid===mine?-1:b.uid===mine?1:0});var members=arr.map(function(x){var online=x.online!==false && (function(){var t=x.lastSeenAt,ms=t&&typeof t.toMillis==='function'?t.toMillis():(typeof t==='number'?t:Date.now());return Date.now()-ms<90000})();return '<span class="eq-member '+(online?'':'off')+'">'+(online?'🟢':'⚪')+' '+escf(x.operator||'NÃO IDENTIFICADO')+' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+escf(x.operation||'—')+'</span>'}).join('');el.style.display='block';el.innerHTML='<div class="eq-head">EQUIPE/TURNO <b>'+escf(d.team)+'</b> • '+escf(d.shiftType||period())+'<br><span style="font-weight:700">INICIADO POR: '+escf(d.startedByName||'—')+'</span></div><div class="eq-members">'+(members||'<span class="eq-member off">Nenhum operador</span>')+'</div>'}
-async function heartbeat(team,op){try{await ready();var u=uid();if(!u)return;var ref=sessionRef(team);var key='participants.'+u,patch={};patch[key+'.uid']=u;patch[key+'.operator']=state.operator||operatorName();patch[key+'.operation']=op==='consumo'?'SANSOM':'DESCARGA';patch[key+'.team']=team;patch[key+'.deviceId']=state.deviceId;patch[key+'.online']=true;patch[key+'.lastSeenAt']=firebase.firestore.FieldValue.serverTimestamp();await ref.update(patch)}catch(e){console.warn('[ComBio] heartbeat',e)}}
-var hb=null;function startHB(team){if(hb)clearInterval(hb);hb=setInterval(function(){if(state&&state.integratedShift&&state.integratedShift.open)heartbeat(team,state.active)},30000)}
-function subscribe(team){try{if(window.__combioFinalUnsub)window.__combioFinalUnsub();window.__combioFinalUnsub=sessionRef(team).onSnapshot(function(s){if(s.exists){var d=s.data()||{};renderStatus(d);if(state){state.team=d.team||state.team;state.sessionId=d.sessionId||teamSessionId(team);}}},function(e){console.warn('[ComBio] listener',e)})}catch(e){}}
-function setLocalFromSession(d,op,name){var team=d.team;state.team=team;state.turno=team;state.operator=name;state.sessionId=d.sessionId||teamSessionId(team);state.integratedShift=state.integratedShift||{};state.integratedShift.open=true;state.integratedShift.team=team;state.integratedShift.turno=team;state.integratedShift.type=d.shiftType||period();state.integratedShift.sessionId=state.sessionId;state.integratedShift.shared=true;state.integratedShift.initialOperation=d.initialOperation||op;state.shiftRole=state.shiftRole||op;state.shifts=state.shifts||{};state.shifts[op]=Object.assign({},state.shifts[op]||{},{open:true,type:state.integratedShift.type,team:team,operator:name,turno:team,sessionId:state.sessionId});}
-async function joinOrStart(op){
-  if(!operatorName()){alert('Digite o nome do operador.');return false}
-  var team=selectedTeam(), name=operatorName(), control=await activeControl();
-  if(control&&control.shiftOpen!==false){
-    if(String(control.team).toUpperCase()!==team){alert('⚠️ EQUIPE/TURNO INCORRETO\n\nA Equipe/Turno em operação atualmente é '+control.team+'.\nVocê informou '+team+'.\n\nAltere para '+control.team+' para continuar.');return false}
-    var snap=await sessionRef(team).get();
-    if(!snap.exists){alert('A sessão da Equipe/Turno '+team+' não foi encontrada no Firebase.');return false}
-    var d=snap.data()||{};d.participants=Object.assign({},d.participants||{});d.participants[uid()]={uid:uid(),operator:name,team:team,operation:op==='consumo'?'SANSOM':'DESCARGA',deviceId:state.deviceId,online:true,lastSeenAt:firebase.firestore.FieldValue.serverTimestamp(),joinedAt:firebase.firestore.FieldValue.serverTimestamp()};await sessionRef(team).set({participants:d.participants,lastUpdatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});setLocalFromSession(d,op,name);subscribe(team);startHB(team);renderStatus(Object.assign({},d,{participants:d.participants}));return true;
-  }
-  var ref=controlRef(), sess=sessionRef(team), now=new Date().toISOString(), u=uid();
-  var finalTeam=team;
-  await db().runTransaction(async function(tx){
-    var c=await tx.get(ref);
-    if(c.exists && c.data().shiftOpen!==false){var cd=c.data();if(String(cd.team).toUpperCase()!==team)throw new Error('EQUIPE_CONFLITO:'+cd.team);finalTeam=cd.team;return}
-    tx.set(ref,{workDate:todayKey(),shiftType:period(),team:team,shiftOpen:true,startedByUid:u,startedByName:name,startTimestamp:firebase.firestore.FieldValue.serverTimestamp(),confirmedByFirst:true},{merge:true});
-  });
-  var sessData={sessionId:teamSessionId(finalTeam),workDate:todayKey(),shiftType:period(),team:finalTeam,turno:finalTeam,shiftOpen:true,startTimestamp:now,startedByUid:u,startedByName:name,initialOperation:op==='consumo'?'CONSUMO':'DESCARGA',participants:{}};
-  sessData.participants[u]={uid:u,operator:name,team:finalTeam,operation:op==='consumo'?'SANSOM':'DESCARGA',deviceId:state.deviceId,online:true,lastSeenAt:firebase.firestore.FieldValue.serverTimestamp(),joinedAt:firebase.firestore.FieldValue.serverTimestamp()};
-  await sess.set(sessData,{merge:true});setLocalFromSession(sessData,op,name);subscribe(finalTeam);startHB(finalTeam);renderStatus(sessData);return true;
-}
-async function openStart(op){var p=$f('combioV61StartPopup');if(!p)return;p.dataset.operation=op;var title=$f('combioV61PopupTitle');if(title)title.textContent='INÍCIO DO TURNO — '+(op==='consumo'?'CONSUMO':'DESCARREGAMENTO');var name=$f('combioV61Operador');if(name)name.value='';var h=new Date().getHours();var turn=$f('combioV65Turno');if(turn){turn.value=(state&&state.team)||'A';}var hor=$f('combioV65Horario');if(hor)hor.value=h>=7&&h<19?'07:00 às 19:00':'19:00 às 07:00';p.style.display='flex';p.setAttribute('aria-hidden','false');try{var c=await activeControl();if(c&&c.team){if(turn)turn.value=c.team;showSugestao(c.team,'já confirmada em operação');}else{var sug=(typeof suggestedTeam==='function'?suggestedTeam():'A');if(turn)turn.value=sug;showSugestao(sug,'sugestão pela escala/histórico');}}catch(e){showSugestao((state&&state.team)||'A','sugestão local')}setTimeout(function(){if(name)name.focus()},80)}
-async function confirmStart(){var p=$f('combioV61StartPopup'),op=p&&p.dataset.operation||'consumo';try{await ready();var control=await activeControl();var team=selectedTeam();var first=!control||control.shiftOpen===false;if(first){var ok=confirm('⚠️ CONFIRMAÇÃO DE EQUIPE/TURNO\n\nVocê está iniciando a Equipe/Turno '+team+'.\n\nConfirma que a Equipe/Turno '+team+' é a equipe em operação?');if(!ok)return;}var joined=await joinOrStart(op);if(!joined)return; if(typeof save==='function')save();if(typeof render==='function')render();if(typeof updateV78UI==='function')updateV78UI();if(typeof showV78Panel==='function')showV78Panel(op);if(p){p.style.display='none';p.setAttribute('aria-hidden','true')}toast('Equipe/Turno '+state.team+' conectado ao Firebase');}catch(e){if(String(e.message||'').indexOf('EQUIPE_CONFLITO:')===0){var t=String(e.message).split(':')[1];alert('⚠️ EQUIPE/TURNO INCORRETO\n\nA equipe em operação é '+t+'.\nVocê deve entrar como '+t+'.')}else{console.error('[ComBio] início do turno:',e);var msg=String(e&&e.message||e||'erro desconhecido');if(msg.indexOf('permission-denied')>=0||msg.indexOf('PERMISSION_DENIED')>=0){msg='Permissão do Firestore recusada.'}else if(msg.indexOf('network')>=0||msg.indexOf('unavailable')>=0){msg='Sem comunicação com o Firestore.'}else if(msg.indexOf('Tempo esgotado')>=0){msg='O Firebase não respondeu a tempo.'}else{msg='Falha na comunicação com o Firebase.'}alert('Não foi possível conectar ao Firebase.\n\n'+msg+'\n\nTente novamente.')}}}
-async function recover(){try{await ready();var c=await activeControl();if(!c||c.shiftOpen===false)return;var team=c.team,s=await sessionRef(team).get();if(!s.exists)return;var d=s.data()||{};var u=uid();if(!u)return;var part=d.participants&&d.participants[u];if(!part)return;setLocalFromSession(d,state.active||'consumo',part.operator||state.operator||'');subscribe(team);startHB(team);renderStatus(d)}catch(e){console.warn('[ComBio] recuperação',e)}}
-function bind(){var a=$f('startConsumoBtn'),b=$f('startDescargaBtn');if(a){var n=a.cloneNode(true);a.parentNode.replaceChild(n,a);n.onclick=function(e){e.preventDefault();openStart('consumo')}}if(b){var n2=b.cloneNode(true);b.parentNode.replaceChild(n2,b);n2.onclick=function(e){e.preventDefault();openStart('descarga')}}var ok=$f('combioV61Confirm');if(ok)ok.onclick=function(e){e.preventDefault();confirmStart()};var inp=$f('combioV61Operador');if(inp)inp.onkeydown=function(e){if(e.key==='Enter')confirmStart()};recover()}
-window.__combioFirebaseEquipeFinal={openStart:openStart,confirmStart:confirmStart,recover:recover,join:joinOrStart};
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(bind,1800)});else setTimeout(bind,1800);
+  window.__combioFirebaseEquipeFinal={
+    openStart:function(op){
+      if(window.__combioV78 && typeof window.__combioV78.openStart==='function') return window.__combioV78.openStart(op);
+    },
+    confirmStart:function(){
+      var p=document.getElementById('combioV61StartPopup');
+      var op=p&&p.dataset.operation||'consumo';
+      if(window.__combioV78 && typeof window.__combioV78.start==='function') return window.__combioV78.start(op);
+    },
+    recover:function(){return false},
+    join:function(){return false}
+  };
 })();
 </script>
 
@@ -2630,6 +2598,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       return true;
     }catch(e){
       console.error('[ComBio Firebase] não foi possível entrar na sessão',e);
+      var code=String(e&&e.code||'');
+      var detail=String(e&&e.message||e||'erro desconhecido');
+      if(code.indexOf('permission-denied')>=0 || detail.indexOf('permission-denied')>=0){
+        alert('Firebase: permissão do Firestore recusada.\n\nConfira as regras publicadas.');
+      }else if(code.indexOf('unavailable')>=0 || detail.toLowerCase().indexOf('network')>=0){
+        alert('Firebase: sem comunicação com o Firestore.\n\nVerifique a conexão de internet e tente novamente.');
+      }else{
+        alert('Firebase: falha ao entrar na sessão.\n\nCódigo: '+(code||'sem código')+'\nMensagem: '+detail);
+      }
       return false;
     }
   }
