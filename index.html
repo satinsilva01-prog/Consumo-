@@ -239,9 +239,10 @@ main{padding:0 9px;min-width:0}.selector{display:grid;grid-template-columns:1fr 
 <div class="app">
 <header class="header">
 <div class="brand"><div class="logo"><svg viewBox="0 0 80 80"><path d="M39 69C18 60 8 40 18 14c18 2 31 13 35 30C55 57 47 66 39 69Z" fill="#6bdc3c"/><path d="M42 69C44 44 57 23 72 12c7 28-4 49-30 57Z" fill="#27b94a"/><path d="M39 69C39 49 45 31 60 18" fill="none" stroke="#087a43" stroke-width="4"/></svg></div><div><b>Combio</b><small>Energia</small></div></div>
-<div class="title" id="pageTitle">CONSUMO DO SANSOM<span>Produção • Turno</span></div><div id="combioEquipeStatus" class="combio-equipe-status" style="display:none"></div>
+<div class="title" id="pageTitle">CONSUMO DO SANSOM<span>Produção • Turno</span></div>
 <div class="datebox"><strong id="date"></strong><span>Turno: 07:00 - 19:00</span><b id="environmentBadge" style="display:block;margin-top:4px;font-size:9px;padding:3px 5px;border-radius:7px;background:#f59a23;color:#111">MODO TESTE</b></div>
 </header>
+<div id="combioEquipeStatus" class="combio-equipe-status" style="display:none"></div>
 <main>
 <div id="environmentControl" style="background:#fff;border-radius:13px;padding:9px;margin-bottom:9px;display:flex;align-items:center;gap:7px;box-shadow:0 2px 8px #002b1c22">
   <div style="flex:1"><small style="display:block;color:#53625b;font-weight:800;font-size:9px">AMBIENTE ATUAL</small><strong id="environmentText" style="font-size:14px">MODO TESTE</strong></div>
@@ -1760,8 +1761,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 
 <!-- COMBIO — REGRA DEFINITIVA EQUIPE/TURNO POR LETRA + PRIMEIRO LOGIN + PRESENÇA FIREBASE -->
 <style id="combio-firebase-equipe-regra-final">
-#combioEquipeStatus{display:none;margin:8px 12px 10px;padding:11px 12px;border:2px solid #cfdad4;border-radius:12px;background:#f7faf8;font-size:12px;color:#24332b}
-#combioEquipeStatus .eq-head{display:block;font-weight:900;line-height:1.45}
+#combioEquipeStatus{display:none;position:relative;z-index:1;width:auto;box-sizing:border-box;margin:8px 10px 8px;padding:10px 11px;border:2px solid #cfdad4;border-radius:12px;background:#f7faf8;font-size:12px;color:#24332b;clear:both;overflow:hidden}
+#combioEquipeStatus .eq-head{display:flex;flex-direction:column;gap:4px;font-weight:900;line-height:1.45}
 #combioEquipeStatus .eq-members{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 #combioEquipeStatus .eq-member{padding:6px 9px;border-radius:999px;background:#fff;border:1px solid #d7e1dc;font-weight:800}
 #combioEquipeStatus .eq-member.off{opacity:.55}
@@ -2534,9 +2535,12 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       var op=E(x.operation||'—');
       return '<span class="eq-member '+(online?'on':'off')+'">● '+nome+' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+op+'</span>';
     }).join('');
-    var startedBy=data.startedByName||((arr.find(function(x){return x.uid===data.startedByUid})||{}).operator)||'—';
+    /* O nome mostrado em "INICIADO POR" é o colega da outra operação,
+       nunca o próprio operador deste aparelho. */
+    var other=arr.find(function(x){return x.uid && x.uid!==mine && x.operator;});
+    var otherName=other ? other.operator : '—';
     el.style.display='block';
-    el.innerHTML='<div class="eq-head"><span>EQUIPE '+E(data.team)+' · '+E(data.shiftType||'TURNO')+'</span><span>INICIADO POR: '+E(startedBy)+'</span></div><div class="eq-members">'+(members||'<span class="eq-member off">Nenhum operador</span>')+'</div>';
+    el.innerHTML='<div class="eq-head"><span>EQUIPE '+E(data.team)+' · '+E(data.shiftType||'TURNO')+'</span><span>INICIADO POR: '+E(otherName)+'</span></div><div class="eq-members">'+(members||'<span class="eq-member off">Nenhum operador</span>')+'</div>';
   }
   function subscribeEquipeSession(id){
     try{
@@ -3335,8 +3339,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
             ' — '+(online?'LOGADO':'NÃO LOGADO')+' · '+esc(p.operation||'—')+
             '</span>';
         }).join('');
+        /* Cada celular identifica o operador que está na outra operação. */
+        var colega=arr.find(function(p){return p.uid && p.uid!==localUid && p.operator;});
+        var colegaNome=colega ? colega.operator : '—';
         el.innerHTML='<div class="eq-head"><span>EQUIPE/TURNO <b>'+esc(d.team)+'</b> • '+esc(d.shiftType||'TURNO')+
-          '</span><span>INICIADO POR: '+esc(d.startedByName||'—')+
+          '</span><span>INICIADO POR: '+esc(colegaNome)+
           '</span></div><div class="eq-members">'+(html||'<span class="eq-member off">Aguardando operador</span>')+'</div>';
       }
 
