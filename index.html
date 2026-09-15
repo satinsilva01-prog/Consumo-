@@ -2729,24 +2729,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     state.paCarregadeira=pa;
     state.sessionId=joining?idPreview:null;
     if(joining){
-      /* Recupera o estado compartilhado antes de registrar este operador. */
-      if(existing.sharedOperational){
-        var so=existing.sharedOperational;
-        if(so.consumo){
-          state.consumo=state.consumo||{};
-          state.consumo.operatorCounts=Object.assign({},so.consumo.operatorCounts||{});
-          state.consumo.operatorCurrentCounts=Object.assign({},so.consumo.operatorCurrentCounts||{});
-          state.consumo.totalShift=Number(so.consumo.totalShift||0);
-          state.consumo.segments=Array.isArray(so.consumo.segments)?so.consumo.segments:[];
-          state.consumo.lastConchaAt=Number(so.consumo.lastConchaAt||0);
-        }
-        if(so.descarga){
-          state.descarga=state.descarga||{};
-          state.descarga.trucks=Number(so.descarga.trucks||0);
-          state.descarga.lastTruck=so.descarga.lastTruck||null;
-          state.descarga.currentDraft=so.descarga.currentDraft||null;
-          state.descarga.records=Array.isArray(so.descarga.records)?so.descarga.records:[];
-        }
+      /* Recupera SOMENTE MIX/BAIA. Contadores pertencem a cada aparelho. */
+      if(existing.sharedOperational && existing.sharedOperational.consumo){
+        var so=existing.sharedOperational.consumo;
+        state.consumo=state.consumo||{};
+        if(so.mix)state.consumo.mix=so.mix;
+        if(so.bays)state.consumo.bays=so.bays;
+        state.consumo.mixVersion=Number(so.mixVersion||state.consumo.mixVersion||0);
+        state.consumo.mixChangedAt=so.mixChangedAt||state.consumo.mixChangedAt||null;
+        state.consumo.mixChangedBy=so.mixChangedBy||state.consumo.mixChangedBy||'';
       }
       state.integratedShift={open:true,initialOperation:existing.initialOperation||op,start:existing.startTimestamp||now.toISOString(),operator:nome,team:equipe,turno:existing.turno||turno,type:existing.shiftType||tipo,deviceId:state.deviceId,sessionId:idPreview,paCarregadeira:pa,shared:true};
     }else{
@@ -2945,6 +2936,19 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function updateV78UI(){
     ensureV78();
     var role=primaryOp(), active=currentOp();
+    /* O encerramento fica destacado somente na operação responsável pelo turno. */
+    ['endTurn','endTurnDesc'].forEach(function(id){
+      var b=document.getElementById(id); if(!b)return;
+      var isCons=id==='endTurn';
+      var allowed=hasTurn() && ((role==='consumo'&&isCons)||(role==='descarga'&&!isCons));
+      b.style.display=hasTurn()?'block':'none';
+      b.style.width='100%';
+      b.style.minHeight='62px';
+      b.style.opacity=allowed?'1':'0.35';
+      b.style.filter=allowed?'none':'grayscale(1)';
+      b.style.pointerEvents=allowed?'auto':'none';
+      b.setAttribute('aria-disabled',allowed?'false':'true');
+    });
     var title=document.getElementById('pageTitle');
     if(title){
       var main=active==='consumo'?'CONSUMO DO SANSOM':'DESCARGA DE CAMINHÃO';
@@ -3310,28 +3314,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   }
 
   function boot(){
-    if(booted)return;
-    booted=true;
-    hookSave();
-
-    setInterval(function(){
-      try{
-        hookSave();
-        if(state && state.sessionId){
-          subscribe(state.sessionId);
-          scheduleSync();
-        }
-      }catch(e){}
-    },1500);
-
-    /* Tenta imediatamente se a sessão já tiver sido recuperada. */
-    try{
-      if(window.combioFirebaseReady){
-        window.combioFirebaseReady.then(function(){
-          if(state && state.sessionId)subscribe(state.sessionId);
-        }).catch(function(){});
-      }
-    }catch(e){}
+    /* DESATIVADO: sincronizador Firebase legado.
+       Ele recuperava sharedOperational antigo e sobrescrevia o contador local.
+       O NOVO MODELO abaixo é o único responsável pela sincronização. */
+    return;
   }
 
   if(document.readyState==='loading'){
