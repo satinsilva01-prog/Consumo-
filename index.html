@@ -1926,6 +1926,8 @@ function mix44(kind){
     state.consumo.count=0;
     state.consumo.mix=m;state.consumo.bays=b;
 
+    /* Durante o fechamento, nenhum sync genérico pode devolver o ciclo antigo. */
+    window.__combioFirebaseCycleClosing=true;
     (async function(){
       try{
         await firebaseReady();
@@ -1970,14 +1972,23 @@ function mix44(kind){
             state.consumo.operatorCurrentCounts=Object.assign({},rc.operatorCurrentCounts||{});
             state.consumo.operatorCurrentMix=Object.assign({},rc.operatorCurrentMix||{});
           }
+          /* O resultado da transação é a fonte oficial: somente agora liberamos
+             a sincronização normal. O ciclo atual permanece zerado localmente. */
+          state.consumo.operatorCurrentCounts={};
+          state.consumo.operatorCurrentMix={};
+          state.consumo.count=0;
           window.__combioFirebaseSkipNextOperationalSync=true;
         }
       }catch(e){
-        window.__combioFirebaseSkipNextOperationalSync=false;
         console.warn('[ComBio Firebase] fechamento de ciclo não sincronizado:',e);
+      }finally{
+        window.__combioFirebaseCycleClosing=false;
       }
     })();
 
+    state.consumo.operatorCurrentCounts={};
+    state.consumo.operatorCurrentMix={};
+    state.consumo.count=0;
     save44();render();
     if(typeof updateV78UI==='function')updateV78UI();
     setTimeout(function(){var q=document.getElementById('count');if(q)q.textContent='0'},0);
@@ -3435,6 +3446,13 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
     try{
       if(s.consumo){
         state.consumo=state.consumo||{};
+        var remoteCycleSeq=Number(s.consumo.cycleSeq||0);
+        var localCycleSeq=Number(state.consumo.cycleSeq||0);
+        /* Uma geração mais nova do ciclo é sempre soberana. Nunca restaura
+           contadores de uma geração anterior depois de uma troca. */
+        if(remoteCycleSeq<localCycleSeq){
+          return;
+        }
         /* Mantém contadores por operador dos dois aparelhos. */
         state.consumo.operatorCounts=Object.assign(
           {}, state.consumo.operatorCounts||{}, s.consumo.operatorCounts||{}
@@ -3528,7 +3546,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   }
 
   async function syncOperational(){
-    if(applyingRemote || window.__combioFirebaseSyncApplying) return;
+    if(applyingRemote || window.__combioFirebaseSyncApplying || window.__combioFirebaseCycleClosing) return;
     if(window.__combioFirebaseSkipNextOperationalSync){
       window.__combioFirebaseSkipNextOperationalSync=false;
       return;
